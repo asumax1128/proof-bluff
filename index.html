@@ -325,10 +325,10 @@ function refreshHand(p){
 }
 function compound(a,b,op){
   const thr = k=>/^(ge|le)/.test(k);
-  if(!b) return {label:a.label, neg:a.neg, set:a.set, thr:thr(a.key)};
+  if(!b) return {label:a.label, neg:a.neg, set:a.set, thr:thr(a.key), spec:{a:a.key}};
   return op==='and'
-    ? {label:`${a.label} かつ ${b.label}`, neg:`${a.neg} または ${b.neg}`, set:AND(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key)}
-    : {label:`${a.label} または ${b.label}`, neg:`${a.neg} かつ ${b.neg}`, set:OR(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key)};
+    ? {label:`${a.label} かつ ${b.label}`, neg:`${a.neg} または ${b.neg}`, set:AND(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key), spec:{a:a.key, b:b.key, op}}
+    : {label:`${a.label} または ${b.label}`, neg:`${a.neg} かつ ${b.neg}`, set:OR(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key), spec:{a:a.key, b:b.key, op}};
 }
 /* ぼかし：真なら P⇒W となる W、偽なら S⇒P となる S の否定（対偶） */
 function weakOptions(q, n){
@@ -366,13 +366,16 @@ let view = 'opp';      // 盤面タブ：opp=相手の数 / me=相手から見�
 let showMe = false;    // 「CPUから見たあなた」の表示
 let hidden = false;
 const other = p => p==='h'?'c':'h';
-const NAME = {h:'あなた', c:'CPU'};
+const NAME = {h:'あなた', c:'CPU'};   // 画面に出す名前（自分から見て）
+let PN = {h:'あなた', c:'CPU'};         // 対局の役（h／c）ごとの名前。オンラインでは両者のニックネーム
+const nm = (p, me) => p===me ? 'あなた' : PN[p];
 /* 勝ち点：勝つと2点。自分のターン数が3以内+5、5以内+3、10以内+1 */
 const bonusFor = t => t<=3 ? 5 : t<=5 ? 3 : t<=10 ? 1 : 0;
 const ptsFor = t => 2 + bonusFor(t);
 
 function startMatch(){
   M = {games:cfg.games, no:0, pts:{h:0,c:0}, results:[]};
+  if(!(D && D.role==='host')){ PN={h:'あなた', c:'CPU'}; NAME.c='CPU'; }
   newGame();
 }
 function newGame(){
@@ -381,9 +384,15 @@ function newGame(){
   const mine = parseInt(cfg.mySecret,10);
   M.no++;
   const first = M.no%2===1 ? 'h' : 'c';   // 先手は1戦ごとに交代
+  const online = !!(D && D.role==='host');
+  let csec = rint(1,N);
+  if(online){
+    const g=parseInt(D.gSec[D.guest+':'+M.no],10); if(g>=1 && g<=N) csec=g;   // 相手が決めた秘密の数
+    PN={h:O.nick||'ホスト', c:D.gName||'相手'}; NAME.c=PN.c;
+  }
   S = {
     N, lv:cfg.lv, board:cfg.board,
-    sec:{h: (mine>=1 && mine<=N) ? mine : rint(1,N), c: rint(1,N)},
+    sec:{h: (mine>=1 && mine<=N) ? mine : rint(1,N), c: csec}, online, gid:Date.now(),
     hand:{h:[], c:[]},
     lies:{h:cfg.lies?m.lies:0, c:cfg.lies?m.lies:0}, weak:{h:m.weak, c:m.weak}, inq:{h:1, c:1},
     liesOn:cfg.lies, cut:null, hint:null, hintDone:false,
@@ -393,6 +402,7 @@ function newGame(){
   };
   cfg.mySecret='';
   view='opp'; hidden=false; showMe=false;
+  if(online) rref(`res/${D.guest}`).set({sec:{gid:S.gid, n:S.sec.c}}).catch(()=>{});
   refreshHand('h'); refreshHand('c');
   startTurn(first);
   window.scrollTo(0,0);
@@ -443,30 +453,42 @@ const markSet = () => mk(n=>!isMarked(n));
 
 /* ============ カットイン ============ */
 let cutTimer=null;
-function showCut(c, then){
-  S.cut=Object.assign({}, c, {then}); render();
-  clearTimeout(cutTimer); cutTimer=setTimeout(closeCut, c.ms||2600);
+/* c は「見る人（h／c）→ カットインの中身」の関数。オンラインでは相手用の中身も一緒に送る */
+/* cont：カットインの後の続き（ホストが読み込み直したときに再開するため） */
+function showCut(c, then, cont){
+  const f = typeof c==='function' ? c : ()=>c;
+  const loc = f('h');
+  S.cut=Object.assign({}, loc, {then}); S.cont=cont||null;
+  if(S.online) S.ev={id:Date.now()+Math.random(), cut:f('c')};
+  render();
+  clearTimeout(cutTimer); cutTimer=setTimeout(closeCut, loc.ms||2600);
 }
 function closeCut(){
   clearTimeout(cutTimer);
   if(!S || !S.cut) return;
-  const t=S.cut.then; S.cut=null;
+  if(S.guest){ G.cut=null; render(); return; }
+  const t=S.cut.then; S.cut=null; S.cont=null;
   if(t) t(); else render();
 }
-function cutForQA(r){
-  const who = (r.ans==='h' ? 'あなたの答え' : 'CPUの答え') + (r.q.inq ? '（尋問）' : '');
+function cutForQA(r, me){
+  me = me || 'h';
+  const who = nm(r.ans, me)+'の答え' + (r.q.inq ? '（尋問）' : '');
   if(r.type==='weak') return {who, big:'ぼかし', cls:'weak', line:`n は ${r.weak.text}`};
   return r.said ? {who, big:'はい', cls:'yes', line:`n は ${r.q.label}`} : {who, big:'いいえ', cls:'no', line:`n は ${r.q.neg}`};
 }
 
 /* あなたの5ターン目が終わった時点で、おたがいに「まだ見破られていない嘘」があるかを一度だけ発表 */
 function maybeHint(then){
-  if(!S.liesOn || S.hintDone || S.turnNo.h<HINT_TURN) return false;
+  // CPU戦：あなたの5ターン目が終わったとき ／ オンライン：おたがいが5ターンを終えたとき
+  const ready = S.online ? (S.turnNo.h>=HINT_TURN && S.turnNo.c>=HINT_TURN) : S.turnNo.h>=HINT_TURN;
+  if(!S.liesOn || S.hintDone || !ready) return false;
   S.hintDone=true;
   const has = X => S.recs.some(r=>r.kind==='qa' && r.ans===X && r.lie && r.status!=='revealed');
   S.hint = {h:has('h'), c:has('c'), at:S.recs.length};
-  showCut({who:`あなたの${HINT_TURN}ターン目が終了 ・ 嘘の発表`, big:S.hint.c?'嘘あり':'嘘なし', cls:S.hint.c?'no':'yes',
-    line:`CPU：${S.hint.c?'まだ見破られていない嘘をついている':'ここまでの答えは全部本当'}\nあなた：${S.hint.h?'ばれていない嘘あり（CPUにも伝わった）':'隠れた嘘なし'}\n（発表はこの1回だけ）`, ms:4600}, then);
+  showCut(me=>{ const op=other(me); return {
+    who: S.online ? `おたがい${HINT_TURN}ターンが終了 ・ 嘘の発表` : `あなたの${HINT_TURN}ターン目が終了 ・ 嘘の発表`,
+    big:S.hint[op]?'嘘あり':'嘘なし', cls:S.hint[op]?'no':'yes',
+    line:`${PN[op]}：${S.hint[op]?'まだ見破られていない嘘をついている':'ここまでの答えは全部本当'}\nあなた：${S.hint[me]?`ばれていない嘘あり（${PN[op]}にも伝わった）`:'隠れた嘘なし'}\n（発表はこの1回だけ）`, ms:4600}; }, then, then.cont);
   return true;
 }
 function lieHint(X){ return S.hint ? S.hint[X] : null; }
@@ -482,7 +504,7 @@ function endTurn(who){
 /* cont=true：ダウト成功でもう一度行動（同じターンの続き） */
 function startTurn(p, cont){
   if(S.winner) return;
-  if(!cont && maybeHint(()=>startTurn(p))) return;
+  if(!cont){ const nx=()=>startTurn(p); nx.cont={k:'start', p}; if(maybeHint(nx)) return; }
   if(!cont){
     S.turnNo[p]++;
     if(S.skip[p]>0){ S.skip[p]--; log({kind:'skip', who:p}); return startTurn(other(p)); }
@@ -494,6 +516,7 @@ function startTurn(p, cont){
     // スマホでは記録の下のほうでダウトしているので、戻すかどうかの質問が見える位置まで動かす
     if(S.restore){ const el=document.getElementById('rsYes'); if(el && el.scrollIntoView) el.scrollIntoView({block:'center'}); }
   }
+  else if(S.online){ S.phase='remote'; render(); }   // オンライン：相手の操作を待つ
   else { S.phase='cpu'; render(); setTimeout(cpuAct, 900); }
 }
 function useCards(p, idxs){
@@ -512,18 +535,19 @@ function makeQA(asker, q, type, extra){
 function doGuess(who, g){
   const target=other(who), ok = g===S.sec[target];
   log({kind:'guess', who, target, g, ok});
-  const head = who==='h' ? 'あなたの宣言' : 'CPUの宣言';
+  const head = me => nm(who,me)+'の宣言';
   if(ok){
     const t=S.turnNo[who], pts=ptsFor(t);
     M.pts[who]+=pts; M.results.push({winner:who, turns:t, pts, secH:S.sec.h, secC:S.sec.c});
-    showCut({who:head, big:'正解', cls:'yes', line:`秘密の数は ${g} ・ ${t}ターン目で正解 ・ +${pts}点`}, ()=>{
-      S.winner=who; S.phase='over'; S.rv={k:S.recs.length, X:'c'}; render(); window.scrollTo(0,0);
-    });
+    showCut(me=>({who:head(me), big:'正解', cls:'yes', line:`秘密の数は ${g} ・ ${t}ターン目で正解 ・ +${pts}点`}), ()=>finishGame(who), {k:'over', who});
     return;
   }
   S.skip[who]=1;
-  S.toast = who==='h' ? `はずれ！ ${g} ではありません。次の手番は休みです` : `CPUの宣言「${g}」ははずれ。CPUは次の手番が休みです`;
-  showCut({who:head, big:'はずれ', cls:'no', line:`「${g}」ではない ・ 1回休み`}, ()=>endTurn(who));
+  S.toast = {[who]:`はずれ！ ${g} ではありません。次の手番は休みです`, [other(who)]:`${PN[who]}の宣言「${g}」ははずれ。${PN[who]}は次の手番が休みです`};
+  showCut(me=>({who:head(me), big:'はずれ', cls:'no', line:`「${g}」ではない ・ 1回休み`}), ()=>endTurn(who), {k:'end', who});
+}
+function finishGame(who){
+  S.winner=who; S.phase='over'; S.rv={k:S.recs.length, X:'c'}; render(); window.scrollTo(0,0);
 }
 function doDoubt(who, idx){
   const r=S.recs[idx];
@@ -531,20 +555,20 @@ function doDoubt(who, idx){
     r.status='revealed';
     log({kind:'doubt', who, idx, ok:true});
     S.extra=true;
-    S.toast = who==='h' ? 'ダウト成功！ 嘘を見破った。もう一度行動できます' : 'CPUにダウトされた！ 嘘がばれました。CPUがもう一度行動します';
+    S.toast = {[who]:'ダウト成功！ 嘘を見破った。もう一度行動できます', [other(who)]:`${PN[who]}にダウトされた！ 嘘がばれました。${PN[who]}がもう一度行動します`};
     // ノーマルモード：その嘘のあと（次のCPUの答えまで）に自分で消した数を、戻すかどうか聞く
     if(who==='h' && S.board==='normal'){
       const nums=Object.keys(S.marks).map(Number).filter(n=>S.marks[n]===idx).sort((a,b)=>a-b);
       if(nums.length) S.restore={idx, nums};
     }
     const real = r.truth ? `本当は「n は ${r.q.label}」` : `本当は「n は ${r.q.neg}」`;
-    return showCut({who:NAME[who]+'のダウト', big:'見破った', cls:'yes', line:real}, ()=>endTurn(who));
+    return showCut(me=>({who:nm(who,me)+'のダウト', big:'見破った', cls:'yes', line:real}), ()=>endTurn(who), {k:'end', who});
   } else {
     r.status='confirmed';
     log({kind:'doubt', who, idx, ok:false});
     S.skip[who]=1;
-    S.toast = who==='h' ? 'ダウト失敗…その答えは本当でした。次の手番は休みです' : 'CPUのダウトは失敗。CPUは次の手番が休みです';
-    return showCut({who:NAME[who]+'のダウト', big:'本当', cls:'info', line:'その答えは本当だった ・ 1回休み'}, ()=>endTurn(who));
+    S.toast = {[who]:'ダウト失敗…その答えは本当でした。次の手番は休みです', [other(who)]:`${PN[who]}のダウトは失敗。${PN[who]}は次の手番が休みです`};
+    return showCut(me=>({who:nm(who,me)+'のダウト', big:'本当', cls:'info', line:'その答えは本当だった ・ 1回休み'}), ()=>endTurn(who), {k:'end', who});
   }
 }
 
@@ -626,21 +650,28 @@ function humanAsk(){
   const q=compound(a,b,S.op);
   if(S.inqOn && S.inq.h>0){ q.inq=true; S.inq.h--; }
   useCards('h', S.sel.slice());
+  S.toast=''; S.sel=[]; S.inqOn=false;
+  if(S.online){ S.pending=q; S.phase='await'; render(); return; }   // オンライン：相手の答えを待つ
   const r=cpuAnswer(q); log(r);
-  S.toast=''; S.sel=[]; S.inqOn=false; S.phase='wait';
-  showCut(Object.assign(cutForQA(r), {q:`n は ${q.label}？`}), ()=>endTurn('h'));
+  S.phase='wait';
+  showCut(me=>Object.assign(cutForQA(r,me), {q:`n は ${q.label}？`}), ()=>endTurn('h'), {k:'end', who:'h'});
 }
-function humanAnswer(type, extra){
-  const q=S.pending, r=makeQA('c', q, type, extra); log(r);
+/* asker の質問（S.pending）に、相手が type で答える */
+function applyAnswer(asker, type, extra){
+  const q=S.pending, r=makeQA(asker, q, type, extra); log(r);
   S.pending=null; S.toast=''; S.phase='wait';
-  showCut(Object.assign(cutForQA(r), {q:`n は ${q.label}？`, ms:1600}), ()=>endTurn('c'));
+  showCut(me=>Object.assign(cutForQA(r,me), {q:`n は ${q.label}？`, ms: r.ans===me ? 1600 : 2600}), ()=>endTurn(asker), {k:'end', who:asker});
 }
+function humanAnswer(type, extra){ applyAnswer('c', type, extra); }
 
 /* ============ 表示 ============ */
 function render(){
-  if(!S) return renderStart();
-  if(S.phase==='over') return renderOver();
-  renderGame();
+  if(!S){ if(O.kind==='duel' && O.code) return oRender(); return renderStart(); }
+  // 入力中の数は描き直しても消さない
+  const keep={}; ['guessIn','nextSec'].forEach(id=>{ const e=document.getElementById(id); if(e && e.value) keep[id]=e.value; });
+  if(S.phase==='over') renderOver(); else renderGame();
+  Object.entries(keep).forEach(([id,v])=>{ const e=document.getElementById(id); if(e && !e.value) e.value=v; });
+  if(S.online && !S.guest) duelPublish();
 }
 function renderStart(){
   const segN=[30,50,100].map(n=>`<button aria-pressed="${cfg.N===n}" data-n="${n}">1〜${n}</button>`).join('');
@@ -704,8 +735,7 @@ function listHtml(s){
   return l.length<=40 ? `<p class="num dim" style="font-size:.85rem;word-break:break-all">${l.join(', ')}</p>` : '';
 }
 function qaText(r){
-  const by = r.asker==='h' ? 'あなた' : 'CPU';
-  const to = r.ans==='h' ? 'あなた' : 'CPU';
+  const by = NAME[r.asker], to = NAME[r.ans];
   let a, why='', tags='';
   if(r.q.inq) tags+='<span class="tag inq">尋問</span>';
   if(r.type==='weak'){ a=`「n は ${r.weak.text}」`; tags+='<span class="tag weak">ぼかし</span>'; why=r.weak.why; }
@@ -736,24 +766,24 @@ function logHtml(){
 function hintBadge(X){
   const h=lieHint(X);
   if(h===null) return '';
-  const subj = X==='c' ? 'CPU' : 'あなた';
+  const subj = NAME[X];
   return `<span class="hint ${h?'on':''}">${HINT_TURN}ターン目時点：${subj}に隠れた嘘${h?'あり':'なし'}${hintResolved(X)?'（見破り済み）':''}</span>`;
 }
 function matchLine(){
   if(M.games<=1) return '';
-  return `<span class="matchline num">第${M.no}戦 / ${M.games} ・ あなた ${M.pts.h}点 − CPU ${M.pts.c}点</span>`;
+  return `<span class="matchline num">第${M.no}戦 / ${M.games} ・ あなた ${M.pts.h}点 − ${esc(NAME.c)} ${M.pts.c}点</span>`;
 }
 function boardHtml(){
   if(view==='me'){
     const meC=cand('h'), mc=cnt(meC);
-    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">あなたの答えからCPUが絞れている範囲</span><button class="peek" id="peekBtn" aria-expanded="${showMe}">${showMe?'隠す':'見る'}</button></div>
+    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">あなたの答えから${esc(NAME.c)}が絞れている範囲</span><button class="peek" id="peekBtn" aria-expanded="${showMe}">${showMe?'隠す':'見る'}</button></div>
     ${showMe ? `<div class="row"><span></span><span class="count">${mc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>${gridHtml(meC)}`
       : `<button class="veil" id="veilBtn">タップで表示</button>`}`;
   }
   if(S.board==='easy'){
     const oppC=cand('c'), oc=cnt(oppC);
-    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">これまでのCPUの答えと矛盾しない数</span><span class="count">${oc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
-    ${oc===0 ? '<p class="warn">候補が0個！ どこかでCPUが嘘をついています。ダウトのチャンス</p>':''}
+    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">これまでの${esc(NAME.c)}の答えと矛盾しない数</span><span class="count">${oc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+    ${oc===0 ? '<p class="warn">候補が0個！ どこかで'+esc(NAME.c)+'が嘘をついています。ダウトのチャンス</p>':''}
     ${gridHtml(oppC)}${listHtml(oppC)}`;
   }
   const left=cnt(markSet());
@@ -761,9 +791,11 @@ function boardHtml(){
     ${markGridHtml()}`;
 }
 function renderGame(){
-  const turnTxt = S.phase==='answer' ? 'CPUからの質問' : S.turn==='h' ? 'あなたの番' : 'CPUの番';
+  const turnTxt = S.phase==='answer' ? `${NAME.c}からの質問` : S.turn==='h' ? 'あなたの番' : `${NAME.c}の番`;
+  const toastTxt = !S.toast ? '' : typeof S.toast==='string' ? S.toast : (S.toast.h||'');
+  const away = S.online && O.code && !oppOnline();
   app.innerHTML=`
-<div class="cols"><div class="col"><div class="turn" aria-live="polite">${turnTxt}<span class="turnno num">あなた ${S.turnNo.h}ターン目 ・ CPU ${S.turnNo.c}ターン目</span>${matchLine()}</div>
+<div class="cols"><div class="col"><div class="turn" aria-live="polite">${turnTxt}<span class="turnno num">あなた ${S.turnNo.h}ターン目 ・ ${esc(NAME.c)} ${S.turnNo.c}ターン目</span>${matchLine()}</div>
   <section class="status">
     <div class="who ${S.turn==='h'?'on':''}">
       <span class="name">あなた</span>
@@ -772,18 +804,18 @@ function renderGame(){
       ${hintBadge('h')}
     </div>
     <div class="who ${S.turn==='c'?'on':''}">
-      <span class="name">CPU（${LV[S.lv].name}）</span>
+      <span class="name">${S.online?esc(NAME.c)+(away?' <span class="warn" style="font-size:.75rem">（切断中）</span>':''):`CPU（${LV[S.lv].name}）`}</span>
       <span class="secret">？</span>
       <span class="meta">${S.liesOn?'嘘の残りは秘密 ・ ':''}ぼかし 残${S.weak.c} ・ 尋問 残${S.inq.c}</span>
       ${hintBadge('c')}
     </div>
   </section>
-  ${S.toast?`<div class="toast pop" role="status">${esc(S.toast)}</div>`:''}
+  ${toastTxt?`<div class="toast pop" role="status">${esc(toastTxt)}</div>`:''}
   ${actionHtml()}
 </div><div class="col"><section class="panel">
     <div class="tabs">
-      <button aria-pressed="${view==='opp'}" data-v="opp">CPUの数の候補</button>
-      <button aria-pressed="${view==='me'}" data-v="me">CPUから見たあなた</button>
+      <button aria-pressed="${view==='opp'}" data-v="opp">${esc(NAME.c)}の数の候補</button>
+      <button aria-pressed="${view==='me'}" data-v="me">${esc(NAME.c)}から見たあなた</button>
     </div>
     ${boardHtml()}
   </section>
@@ -791,22 +823,27 @@ function renderGame(){
     <span class="cap">記録</span>
     <ul class="log">${logHtml()}</ul>
   </section>
-  <button class="ghost" id="quitBtn">設定にもどる</button></div></div>
-  ${S.cut?`<button class="cutin" id="cutin" aria-live="assertive">
+  <button class="ghost" id="quitBtn">${S.online?'部屋を出る':'設定にもどる'}</button></div></div>
+  ${cutinHtml()}`;
+  bindGame();
+}
+function cutinHtml(){
+  return S.cut?`<button class="cutin" id="cutin" aria-live="assertive">
     <div class="band">
       <span class="who2">${esc(S.cut.who)}</span>
       ${S.cut.q?`<span class="dim">${esc(S.cut.q)}</span>`:''}
       <span class="big ${S.cut.cls}">${esc(S.cut.big)}</span>
       <span class="line">${esc(S.cut.line)}</span>
       <span class="hint">タップで次へ</span>
-    </div></button>`:''}`;
-  bindGame();
+    </div></button>`:'';
 }
 function actionHtml(){
   if(S.phase==='cpu') return `<section class="panel"><p class="dim">CPUが考えています…</p></section>`;
+  if(S.phase==='remote') return `<section class="panel"><p class="dim">${esc(NAME.c)}の番です。相手の操作を待っています…</p></section>`;
+  if(S.phase==='await') return `<section class="panel"><p class="dim">${esc(NAME.c)}が答えを考えています…</p></section>`;
   if(S.phase==='wait') return `<section class="panel"><p class="dim">…</p></section>`;
   if(S.phase==='answer') return answerHtml();
-  if(S.phase==='doubt') return `<section class="panel"><p>右の記録から、嘘だと思うCPUの「はい／いいえ」を選んでください。（尋問とぼかしの答えは選べません）</p><button class="ghost" id="cancelDoubt">やめる</button></section>`;
+  if(S.phase==='doubt') return `<section class="panel"><p>右の記録から、嘘だと思う${esc(NAME.c)}の「はい／いいえ」を選んでください。（尋問とぼかしの答えは選べません）</p><button class="ghost" id="cancelDoubt">やめる</button></section>`;
   if(S.phase==='restore') return `<section class="panel pop">
     <span class="cap">ダウト成功</span>
     <p>嘘の答えのあと（そのターン）に消した数があります。</p>
@@ -830,7 +867,7 @@ function actionHtml(){
     <div class="hand">${h.map((c,i)=>`<button class="pcard" aria-pressed="${sel.includes(i)}" data-c="${i}">${esc(c.label)}</button>`).join('')}</div>
     ${sel.length===2?`<div class="ops"><button aria-pressed="${S.op==='and'}" data-op="and">かつ</button><button aria-pressed="${S.op==='or'}" data-op="or">または</button></div>`:''}
     ${preview}
-    <button class="inqbtn" id="inqBtn" aria-pressed="${S.inqOn}" ${S.inq.h>0?'':'disabled'}>${S.inq.h>0?(S.inqOn?'尋問する（もう一度押すとやめる）':'尋問カードを使う（残り1回）'):'尋問カードは使用済み'}<small>この質問には、CPUは嘘もぼかしも使えない</small></button>
+    <button class="inqbtn" id="inqBtn" aria-pressed="${S.inqOn}" ${S.inq.h>0?'':'disabled'}>${S.inq.h>0?(S.inqOn?'尋問する（もう一度押すとやめる）':'尋問カードを使う（残り1回）'):'尋問カードは使用済み'}<small>この質問には、${esc(NAME.c)}は嘘もぼかしも使えない</small></button>
     <button class="btn wide" id="askBtn" ${sel.length?'':'disabled'}>${S.inqOn?'この命題で尋問する':'この命題で質問する'}</button>
     <div class="actions">
       <div class="guess"><input type="number" id="guessIn" min="1" max="${N}" placeholder="数"><button class="ghost" id="guessBtn">宣言する</button></div>
@@ -841,7 +878,10 @@ function actionHtml(){
 function bindGame(){
   const $=id=>document.getElementById(id);
   $('hideBtn').onclick=()=>{ hidden=!hidden; render(); };
-  $('quitBtn').onclick=()=>{ clearTimeout(cutTimer); S=null; M=null; render(); window.scrollTo(0,0); };
+  $('quitBtn').onclick=()=>{
+    if(S.online){ if(confirm('対戦をやめて部屋を出ますか？')) duelLeave(); return; }
+    clearTimeout(cutTimer); S=null; M=null; render(); window.scrollTo(0,0);
+  };
   document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ view=b.dataset.v; render(); });
   const tog=()=>{ showMe=!showMe; render(); };
   if($('peekBtn')) $('peekBtn').onclick=tog;
@@ -864,8 +904,13 @@ function bindGame(){
     });
     document.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ S.op=b.dataset.op; render(); });
     $('inqBtn').onclick=()=>{ if(S.inq.h>0){ S.inqOn=!S.inqOn; render(); } };
-    $('askBtn').onclick=humanAsk;
-    $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } S.toast=''; doGuess('h',g); };
+    $('askBtn').onclick=()=>{
+      if(!S.sel.length) return;
+      if(S.guest){ const b={kind:'ask', sel:S.sel.slice(), op:S.op, inq:!!S.inqOn}; S.sel=[]; S.inqOn=false; guestSend(b); }
+      else humanAsk();
+    };
+    $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } $('guessIn').value='';
+      if(S.guest) guestSend({kind:'guess', g}); else { S.toast=''; doGuess('h',g); } };
     if($('doubtBtn')) $('doubtBtn').onclick=()=>{ S.phase='doubt'; S.toast=''; render(); };
   }
   if(S.phase==='restore'){
@@ -875,13 +920,14 @@ function bindGame(){
   }
   if(S.phase==='doubt'){
     $('cancelDoubt').onclick=()=>{ S.phase='act'; render(); };
-    document.querySelectorAll('.doubt-btn').forEach(b=>b.onclick=()=>doDoubt('h', +b.dataset.i));
+    document.querySelectorAll('.doubt-btn').forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(S.guest){ S.phase='act'; guestSend({kind:'doubt', i}); } else doDoubt('h', i); });
   }
   if(S.phase==='answer'){
     const shown = [...document.querySelectorAll('[data-w]')];
-    $('ansHonest').onclick=()=>humanAnswer('honest');
-    if($('ansLie')) $('ansLie').onclick=()=>{ if(S.lies.h>0) humanAnswer('lie'); };
-    shown.forEach(b=>b.onclick=()=>humanAnswer('weak', S._opsShown[+b.dataset.w]));
+    const ans=(type, w)=> S.guest ? guestSend({kind:'answer', type, w: w?{key:w.key, neg:!!w.neg}:null}) : humanAnswer(type, w);
+    $('ansHonest').onclick=()=>ans('honest');
+    if($('ansLie')) $('ansLie').onclick=()=>{ if(S.lies.h>0) ans('lie'); };
+    shown.forEach(b=>b.onclick=()=>ans('weak', S._opsShown[+b.dataset.w]));
   }
 }
 // ぼかしの選択肢は質問ごとに一度だけ作り、表示とボタンで同じものを使う
@@ -893,7 +939,7 @@ function answerHtml(){
   const honest = truth ? `はい（n は ${q.label}）` : `いいえ（n は ${q.neg}）`;
   const lie = truth ? `いいえ（n は ${q.neg}）` : `はい（n は ${q.label}）`;
   return `<section class="ask pop">
-    <span class="cap" style="color:var(--ink-dim)">${inq?'CPUの尋問':'CPUの質問'}</span>
+    <span class="cap" style="color:var(--ink-dim)">${esc(NAME.c)}の${inq?'尋問':'質問'}</span>
     <span class="q">n は ${esc(q.label)}？</span>
     <span class="truth">あなたの数 ${n} は、この命題を<b>${truth?'満たします（真）':'満たしません（偽）'}</b></span>
     ${inq?'<span class="inqnote">尋問なので、嘘もぼかしも使えません</span>':''}
@@ -934,7 +980,7 @@ function reviewHtml(){
   return `<section class="panel">
     <div class="row"><span class="cap">ふり返り</span><span class="dim num" style="font-size:.85rem">${k} / ${K}手</span></div>
     <div class="tabs">
-      <button aria-pressed="${X==='c'}" data-rx="c">CPUの数（${S.sec.c}）</button>
+      <button aria-pressed="${X==='c'}" data-rx="c">${esc(NAME.c)}の数（${S.sec.c}）</button>
       <button aria-pressed="${X==='h'}" data-rx="h">あなたの数（${S.sec.h}）</button>
     </div>
     <div class="rvstep ${st.lie?'lie':''}"><span class="at">${esc(st.at)}</span><span class="qt">${esc(st.body)}${st.tags||''}</span></div>
@@ -961,31 +1007,32 @@ function renderOver(){
   const matchDone = M.no>=M.games;
   const missed = S.board==='normal' && isMarked(S.sec.c);
   let head;
-  if(!matchDone) head = `第${M.no}戦：${win?'あなたの勝ち':'CPUの勝ち'}`;
-  else if(M.games===1) head = win?'あなたの勝ち！':'CPUの勝ち';
-  else head = M.pts.h>M.pts.c ? 'あなたの勝ち！' : M.pts.h<M.pts.c ? 'CPUの勝ち' : '引き分け';
+  const oppWin = `${NAME.c}の勝ち`;
+  if(!matchDone) head = `第${M.no}戦：${win?'あなたの勝ち':oppWin}`;
+  else if(M.games===1) head = win?'あなたの勝ち！':oppWin;
+  else head = M.pts.h>M.pts.c ? 'あなたの勝ち！' : M.pts.h<M.pts.c ? oppWin : '引き分け';
   const rows = M.results.map((x,i)=>`<tr><td>第${i+1}戦</td><td>${NAME[x.winner]}</td><td class="num">${x.turns}ターン</td><td class="num">+${x.pts}点</td></tr>`).join('');
   app.innerHTML=`
 <div class="cols"><div class="col"><header class="title result"><h2>${head}</h2>
     <span class="sub">${NAME[last.winner]}が${last.turns}ターン目で正解 ・ 2点${bonusFor(last.turns)?` ＋ はやさボーナス${bonusFor(last.turns)}点`:''}</span></header>
   <section class="panel">
-    <div class="row"><span class="cap">勝ち点${M.games>1?`（${M.games}本勝負）`:''}</span><span class="num" style="font-weight:700">あなた ${M.pts.h} − ${M.pts.c} CPU</span></div>
+    <div class="row"><span class="cap">勝ち点${M.games>1?`（${M.games}本勝負）`:''}</span><span class="num" style="font-weight:700">あなた ${M.pts.h} − ${M.pts.c} ${esc(NAME.c)}</span></div>
     <div class="tblwrap"><table class="rank"><tr><th>試合</th><th>勝者</th><th>ターン</th><th>点</th></tr>${rows}</table></div>
   </section>
   <section class="status">
     <div class="who"><span class="name">あなたの数</span><span class="secret">${S.sec.h}</span><span class="meta">${S.turnNo.h}ターン ・ 質問 ${S.asks.h}回</span></div>
-    <div class="who"><span class="name">CPUの数</span><span class="secret">${S.sec.c}</span><span class="meta">${S.turnNo.c}ターン ・ 質問 ${S.asks.c}回</span></div>
+    <div class="who"><span class="name">${esc(NAME.c)}の数</span><span class="secret">${S.sec.c}</span><span class="meta">${S.turnNo.c}ターン ・ 質問 ${S.asks.c}回</span></div>
   </section>
   ${missed?`<p class="warn">あなたは正解の ${S.sec.c} を自分で消していました</p>`:''}
   <section class="panel">
     <span class="cap">ついた嘘</span>
-    ${lies.length ? `<ul class="log">${lies.map(r=>{ const t=qaText(r); return `<li class="${r.ans==='h'?'me':''}"><span class="at">${r.ans==='h'?'あなた':'CPU'}の嘘${r.status==='revealed'?'（見破られた）':'（ばれなかった）'}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}</span></li>`; }).join('')}</ul>` : '<p class="dim">どちらも嘘をつきませんでした</p>'}
+    ${lies.length ? `<ul class="log">${lies.map(r=>{ const t=qaText(r); return `<li class="${r.ans==='h'?'me':''}"><span class="at">${esc(NAME[r.ans])}の嘘${r.status==='revealed'?'（見破られた）':'（ばれなかった）'}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}</span></li>`; }).join('')}</ul>` : '<p class="dim">どちらも嘘をつきませんでした</p>'}
   </section>
-  ${matchDone ? `<div class="actions">
+  ${S.online ? overOnlineHtml(matchDone) : matchDone ? `<div class="actions">
     <button class="btn" id="againBtn">同じ設定でもう一度</button>
     <button class="ghost" id="setBtn">設定にもどる</button>
   </div>` : `<section class="panel">
-    <span class="cap">第${M.no+1}戦 ・ ${(M.no+1)%2===1?'あなたが先手':'CPUが先手'}</span>
+    <span class="cap">第${M.no+1}戦 ・ ${(M.no+1)%2===1?(S.guest?esc(NAME.c)+'が先手':'あなたが先手'):(S.guest?'あなたが先手':esc(NAME.c)+'が先手')}</span>
     <div class="guess"><input type="number" id="nextSec" min="1" max="${N}" placeholder="おまかせ"><span class="dim" style="font-size:.85rem">次のあなたの秘密の数（空欄なら自動）</span></div>
     <button class="btn wide" id="nextBtn">第${M.no+1}戦へ</button>
     <button class="ghost" id="setBtn">やめて設定にもどる</button>
@@ -994,12 +1041,36 @@ function renderOver(){
   <section class="panel grow">
     <span class="cap">すべての記録</span>
     <ul class="log">${logHtml()}</ul>
-  </section></div></div>`;
+  </section></div></div>${S.guest?cutinHtml():''}`;
   bindReview();
   const $=id=>document.getElementById(id);
-  if($('againBtn')) $('againBtn').onclick=()=>{ cfg.mySecret=''; startMatch(); };
+  if($('againBtn')) $('againBtn').onclick=()=>{ cfg.mySecret=$('nextSec')?$('nextSec').value:''; startMatch(); };
   if($('nextBtn')) $('nextBtn').onclick=()=>{ cfg.mySecret=$('nextSec').value; newGame(); };
-  $('setBtn').onclick=()=>{ S=null; M=null; render(); window.scrollTo(0,0); };
+  if($('gNextBtn')) $('gNextBtn').onclick=()=>guestSecret(+$('gNextBtn').dataset.no, $('nextSec').value);
+  if($('lobbyBtn')) $('lobbyBtn').onclick=()=>{ clearTimeout(cutTimer); S=null; M=null; O.scr='lobby'; D.lastPub=''; duelLobbyState(); oRender(); };
+  if($('cutin')) $('cutin').onclick=closeCut;
+  $('setBtn').onclick=()=>{ if(S.online){ duelLeave(); return; } S=null; M=null; render(); window.scrollTo(0,0); };
+}
+/* オンライン1vs1の終了画面：ホストは次へ進める、相手は次の秘密の数を送って待つ */
+function overOnlineHtml(matchDone){
+  const no = matchDone ? 1 : M.no+1;
+  const firstTxt = matchDone ? '' : ` ・ ${(M.no+1)%2===1?(S.guest?esc(NAME.c)+'が先手':'あなたが先手'):(S.guest?'あなたが先手':esc(NAME.c)+'が先手')}`;
+  if(!S.guest) return `<section class="panel">
+    <span class="cap">${matchDone?'もう一度対戦する':`第${no}戦`+firstTxt}</span>
+    <div class="guess"><input type="number" id="nextSec" min="1" max="${N}" placeholder="おまかせ"><span class="dim" style="font-size:.85rem">次のあなたの秘密の数（空欄なら自動）</span></div>
+    ${matchDone?'<button class="btn wide" id="againBtn">同じ設定でもう一度</button><button class="ghost" id="lobbyBtn">ルールを変える（ロビーへ）</button>':`<button class="btn wide" id="nextBtn">第${no}戦へ</button>`}
+    ${oppOnline()?'':`<p class="warn">${esc(NAME.c)}の通信が切れています</p>`}
+    <button class="ghost" id="setBtn">部屋を出る</button>
+  </section>`;
+  const sent = G.sentSec[no];
+  return `<section class="panel">
+    <span class="cap">${matchDone?'もう一度対戦するとき':`第${no}戦`+firstTxt}</span>
+    <div class="guess"><input type="number" id="nextSec" min="1" max="${N}" placeholder="おまかせ"><button class="ghost" id="gNextBtn" data-no="${no}">この数にする</button></div>
+    <p class="dim" style="font-size:.82rem">${sent?`次の秘密の数：<b class="num">${sent}</b>（変えるときはもう一度）`:'決めなければ自動で決まります'}</p>
+    ${G.secMsg?`<p class="warn">${esc(G.secMsg)}</p>`:''}
+    <p class="dim">${esc(NAME.c)}が始めるのを待っています…</p>
+    <button class="ghost" id="setBtn">部屋を出る</button>
+  </section>`;
 }
 
 
@@ -1073,8 +1144,8 @@ function fbInit(){
     firebase.initializeApp(FIREBASE_CONFIG);
     fdb = firebase.database();
     fdb.ref('.info/serverTimeOffset').on('value', s=>{ foff = s.val()||0; });
-    firebase.auth().onAuthStateChanged(u=>{ if(u){ uid=u.uid; fbError=''; if(O.scr==='home') oRender(); } });
-    firebase.auth().signInAnonymously().catch(e=>{ fbError='サーバーにログインできませんでした（'+(e.code||'error')+'）'; if(O.scr==='home') oRender(); });
+    firebase.auth().onAuthStateChanged(u=>{ if(u){ uid=u.uid; fbError=''; if(O.on && O.scr==='home') oRender(); } });
+    firebase.auth().signInAnonymously().catch(e=>{ fbError='サーバーにログインできませんでした（'+(e.code||'error')+'）'; if(O.on && O.scr==='home') oRender(); });
   }catch(e){ fbError='オンライン機能の初期化に失敗しました'; }
 }
 const rref = p => fdb.ref(`${OROOT}/${O.code}${p?'/'+p:''}`);
@@ -1086,9 +1157,10 @@ const O = {
   players:{}, st:null, unsub:[], err:'',
   nick: ls.get('bluff-nick'),
   set:{mode:'vote', N:50, lies:true, R:8, voteSec:20, soloMin:8, secret:''},
+  kind:'class', on:false, hostId:'', dset:{board:'easy', N:50, lies:true, games:1, secret:''},   // kind：class=ホストvsチャレンジャー / duel=1vs1
   // 挑戦者
   hand:[], handFor:'', sel:[], op:'and', showBoard:false, myVoteKey:'', myGuessKey:'', toast:'',
-  log:[], seq:0, wait:false, lastEv:0, cut:null, cutT:null, lastScore:null, ansVeil:true,
+  log:[], seq:0, marks:{}, wait:false, lastEv:0, cut:null, cutT:null, lastScore:null, ansVeil:true,
   // ホストだけ
   H:{secret:null, closing:false, voteCount:0, voteRef:null, done:{}, stu:{}, reqRef:null}
 };
@@ -1104,12 +1176,12 @@ async function createRoom(){
     const c=String(rint(1000,9999)), ref=fdb.ref(`${OROOT}/${c}/meta`);
     let res;
     try{
-      res = await ref.transaction(cur=>{ if(cur && cur.host!==uid && cur.createdAt > fnow()-ROOM_TTL) return; return {host:uid, createdAt:TS()}; });
+      res = await ref.transaction(cur=>{ if(cur && cur.host!==uid && cur.createdAt > fnow()-ROOM_TTL) return; return {host:uid, createdAt:TS(), kind:O.kind}; });
     }catch(e){ O.err='部屋を作れませんでした（'+(e.code||e.message)+'）'; oRender(); return; }
     if(res.committed){
       O.code=c;
       await Promise.all(['players','state','secret','votes','guesses','req','res'].map(p=>rref(p).remove().catch(()=>{})));
-      ls.set('bluff-room', c);
+      ls.set(O.kind==='duel'?'bluff-duel':'bluff-room', c);
       return enterRoom(true);
     }
   }
@@ -1121,14 +1193,28 @@ async function joinRoom(c, asScreen){
   let m;
   try{ m=(await fdb.ref(`${OROOT}/${c}/meta`).get()).val(); }catch(e){ O.err='接続できませんでした（'+(e.code||e.message)+'）'; oRender(); return; }
   if(!m || m.createdAt < fnow()-ROOM_TTL){ O.err='その部屋は見つかりません'; oRender(); return; }
-  O.code=c; ls.set('bluff-room', c);
+  if((m.kind||'class')!==O.kind){ O.err = m.kind==='duel' ? 'その部屋は「1 vs 1（オンライン）」の部屋です' : 'その部屋は「ホスト vs チャレンジャー」の部屋です'; oRender(); return; }
+  if(O.kind==='duel' && m.host!==uid){
+    let pl={}; try{ pl=(await fdb.ref(`${OROOT}/${c}/players`).get()).val()||{}; }catch(e){}
+    const others=Object.keys(pl).filter(k=>k!==m.host && k!==uid);
+    if(others.length){ O.err='この部屋はもう2人そろっています'; oRender(); return; }
+  }
+  O.hostId=m.host;
+  O.code=c; ls.set(O.kind==='duel'?'bluff-duel':'bluff-room', c);
   O.screenOnly=!!asScreen && m.host!==uid;
   enterRoom(m.host===uid);
 }
 function enterRoom(host){
-  O.isHost=host; O.scr='lobby'; O.st=null; O.players={}; O.log=[]; O.lastEv=0; O.cut=null;
+  O.isHost=host; O.scr='lobby'; O.st=null; O.players={}; O.log=[]; O.lastEv=0; O.cut=null; O.marks={};
   O.unsub.forEach(u=>u()); O.unsub=[];
   const listen=(ref,fn)=>{ ref.on('value',fn,()=>{}); O.unsub.push(()=>ref.off('value',fn)); };
+  if(O.kind==='duel'){
+    listen(rref('players'), s=>{ O.players=s.val()||{}; if(O.scr==='lobby') oRender(); else if(S) render(); });
+    listen(rref('state'), s=>{ O.st=s.val(); if(O.isHost){ if(!S && O.scr!=='lobby'){ O.scr='lobby'; oRender(); } } else if(G) guestOnState(O.st); });
+    duelEnter();
+    oRender();
+    return;
+  }
   listen(rref('players'), s=>{ O.players=s.val()||{}; if(O.scr==='lobby') refreshLobby(); else if(O.isHost) patchHost(); });
   listen(rref('state'), s=>onState(s.val()));
   if(!host && !O.screenOnly){
@@ -1162,7 +1248,7 @@ function onState(s){
   // カットイン（出来事）
   const ev=s.ev;
   const changed = !prev || prev.phase!==s.phase || prev.round!==s.round || prev.gid!==s.gid;
-  if(prev && prev.gid!==s.gid){ O.myVoteKey=''; O.myGuessKey=''; O.log=[]; O.lastScore=null; }
+  if(prev && prev.gid!==s.gid){ O.myVoteKey=''; O.myGuessKey=''; O.log=[]; O.lastScore=null; O.marks={}; }
   if(changed){ O.sel=[]; O.ansVeil=true; }
   const sc=myScore();
   if(sc && O.lastScore && sc.last && (!O.lastScore.last || sc.last.r!==O.lastScore.last.r)){
@@ -1493,27 +1579,29 @@ function guessVote(g){
 /* ================= 画面 ================= */
 function oRender(){
   const keep={}, act=document.activeElement && document.activeElement.id;
-  ['guessIn','secIn','nickInput','codeInput'].forEach(id=>{ const e=document.getElementById(id); if(e) keep[id]=e.value; });
-  if(O.scr==='home') oHome(); else if(O.scr==='lobby') oLobby(); else oGame();
+  ['guessIn','secIn','nickInput','codeInput','gSecIn'].forEach(id=>{ const e=document.getElementById(id); if(e) keep[id]=e.value; });
+  if(O.scr==='home') oHome();
+  else if(O.kind==='duel'){ if(O.scr==='lobby' || !S) duelLobby(); else render(); }
+  else if(O.scr==='lobby') oLobby(); else oGame();
   Object.entries(keep).forEach(([id,v])=>{ const e=document.getElementById(id); if(e && v!=='' && e.value==='') e.value=v; });
   if(act){ const e=document.getElementById(act); if(e && e.tagName==='INPUT'){ try{ e.focus(); }catch(_){} } }
 }
 function oHome(){
-  const ok=!!(fdb && uid), last=ls.get('bluff-room');
+  const ok=!!(fdb && uid), last=ls.get(O.kind==='duel'?'bluff-duel':'bluff-room');
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs n ・ オンライン</span></header>
+<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">${O.kind==='duel'?'1 vs 1 ・ オンライン':'ホスト vs チャレンジャー ・ オンライン'}</span></header>
   <section class="panel">
     <label class="cap" for="nickInput">プレイヤー名（8文字まで）</label>
     <input type="text" class="txt" id="nickInput" maxlength="8" value="${esc(O.nick)}" placeholder="なまえ" autocomplete="nickname">
   </section>
 </div><div class="col"><section class="panel">
-    <label class="cap" for="codeInput">ホストに言われた部屋コード（4桁）</label>
+    <label class="cap" for="codeInput">${O.kind==='duel'?'相手に言われた部屋コード（4桁）':'ホストに言われた部屋コード（4桁）'}</label>
     <div class="guess"><input type="text" class="txt code-in" id="codeInput" inputmode="numeric" maxlength="4" value="${esc(last)}" placeholder="0000" autocomplete="off"><button class="btn" id="joinBtn" ${ok?'':'disabled'}>参加</button></div>
-    <button class="ghost" id="screenBtn" ${ok?'':'disabled'}>スクリーン（プロジェクター）として見る</button>
+    ${O.kind==='duel'?'':`<button class="ghost" id="screenBtn" ${ok?'':'disabled'}>スクリーン（プロジェクター）として見る</button>`}
     <p class="warn" role="alert">${esc(O.err)}</p>
   </section>
   <section class="panel">
-    <span class="cap">ホスト用</span>
+    <span class="cap">${O.kind==='duel'?'部屋を作る人':'ホスト用'}</span>
     <button class="btn wide" id="createBtn" ${ok?'':'disabled'}>部屋を作る</button>
   </section>
   ${ok?'':`<p class="dim" style="text-align:center;font-size:.85rem">${esc(fbError||'サーバーに接続しています…')}</p>`}
@@ -1523,7 +1611,7 @@ function oHome(){
   const ci=document.getElementById('codeInput'); ci.oninput=()=>{ ci.value=ci.value.replace(/\D/g,'').slice(0,4); };
   const need=()=>{ if(O.nick) return false; O.err='先にプレイヤー名を入れてください'; oRender(); return true; };
   document.getElementById('joinBtn').onclick=()=>{ if(need()) return; joinRoom(ci.value,false); };
-  document.getElementById('screenBtn').onclick=()=>joinRoom(ci.value,true);
+  if(document.getElementById('screenBtn')) document.getElementById('screenBtn').onclick=()=>joinRoom(ci.value,true);
   document.getElementById('createBtn').onclick=()=>{ if(!O.nick){ O.nick='ホスト'; } createRoom(); };
   document.getElementById('backMenu').onclick=goMenu;
 }
@@ -1536,7 +1624,7 @@ function seg(id, items, cur){ return `<div class="seg" id="${id}">${items.map(([
 function oLobby(){
   const S0=O.set;
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs n ・ オンライン</span></header>
+<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">ホスト vs チャレンジャー ・ オンライン</span></header>
   <section class="panel">
     <span class="cap">部屋コード</span>
     <p class="roomcode num">${esc(O.code)}</p>
@@ -1577,6 +1665,16 @@ function oGridHtml(s){
   for(let n=1;n<=N;n++) h+=`<div class="cell${s[n]?'':' out'}">${tiny?'':n}</div>`;
   return h+'</div>';
 }
+/* チャレンジャーの盤面（ノーマル固定）：自動では消えない。自分でタップして消す／もう一度タップで戻す */
+function markBoardO(){
+  const left=N-Object.keys(O.marks).length;
+  let g=`<div class="grid mark" id="markGridO" style="grid-template-columns:repeat(${N<=30?6:10},1fr)">`;
+  for(let n=1;n<=N;n++){ const x=!!O.marks[n]; g+=`<button class="cell${x?' out x':''}" data-n="${n}" aria-pressed="${x}" aria-label="${n}">${n}</button>`; }
+  return `<section class="panel">
+    <div class="boardhead"><span class="dim" style="font-size:.85rem">ホストの数の候補：タップで消す・もう一度タップで戻す</span><span class="count" id="markCountO">${left}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+    ${g}</div>
+  </section>`;
+}
 function boardPanel(cs, label){
   const c=cnt(cs);
   return `<section class="panel">
@@ -1608,7 +1706,7 @@ function handHtml(){
   let preview='';
   if(sel.length){
     const q=compound(h[sel[0]], sel[1]!=null?h[sel[1]]:null, O.op), cs=myCand(), y=cnt(AND(cs,q.set)), t=cnt(cs);
-    preview=`<div class="qpreview">n は ${esc(q.label)}？${O.showBoard?`<small>今の候補${t}個のうち、「はい」なら${y}個、「いいえ」なら${t-y}個が残る</small>`:''}</div>`;
+    preview=`<div class="qpreview">n は ${esc(q.label)}？</div>`;
   }
   return `<span class="cap">手札（1枚、または2枚を「かつ／または」でつなぐ）</span>
     <div class="hand">${h.map((c,i)=>`<button class="pcard" aria-pressed="${sel.includes(i)}" data-c="${i}">${esc(c.label)}</button>`).join('')}</div>
@@ -1758,7 +1856,7 @@ function stuVoteView(){
     ${hintBadgeO(s.hint)}
     <ul class="log">${answersHtml(answers, {doubt: s.phase==='vote' && s.liesOn, doubtLabel:'ダウトに投票'})}</ul>
   </section>
-  ${boardPanel(candFrom(answers), 'ホストの答えと矛盾しない数')}</div></div>
+  ${markBoardO()}</div></div>
   ${cutHtml()}`;
   bindCommon(); bindHand();
   const $=id=>document.getElementById(id);
@@ -1822,7 +1920,7 @@ function stuSoloView(){
     ${hintBadgeO(O.myHint)}
     <ul class="log">${answersHtml(answers, {doubt: !sc.cleared && s.liesOn && !O.wait})}</ul>
   </section>
-  ${boardPanel(myCand(), 'ホストの答えと矛盾しない数')}</div></div>
+  ${markBoardO()}</div></div>
   ${cutHtml()}`;
   bindCommon(); bindHand();
   const $=id=>document.getElementById(id);
@@ -1856,6 +1954,15 @@ function bindCommon(){
   if($('veilBtn')) $('veilBtn').onclick=tog;
   if($('cutin')) $('cutin').onclick=()=>{ clearTimeout(O.cutT); O.cut=null; oRender(); };
   if($('leaveBtn')) $('leaveBtn').onclick=leaveRoom;
+  const mg=$('markGridO');
+  if(mg) mg.onclick=e=>{
+    const b=e.target.closest('[data-n]'); if(!b) return;
+    const n=+b.dataset.n;
+    if(O.marks[n]) delete O.marks[n]; else O.marks[n]=1;
+    const on=!!O.marks[n];
+    b.classList.toggle('out', on); b.classList.toggle('x', on); b.setAttribute('aria-pressed', on);
+    $('markCountO').innerHTML=`${N-Object.keys(O.marks).length}<small class="dim" style="font-size:.8rem"> / ${N}個</small>`;
+  };
 }
 function bindHand(){
   document.querySelectorAll('.pcard').forEach(b=>b.onclick=()=>{
@@ -1866,18 +1973,365 @@ function bindHand(){
   document.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ O.op=b.dataset.op; oRender(); });
 }
 
+
+/* ================================================================
+   オンライン：1 vs 1（CPU戦と同じルールで、人と人が対戦）
+   ・ホストの端末が対局を進める（CPU戦のしくみをそのまま使い、CPUの代わりに相手の操作を受け取る）
+   ・相手（ゲスト）は state に公開された内容だけを見る。自分の秘密の数は res/<uid> で受け取る
+   ・相手の操作は req/<uid>/<k> に書き込み、ホストが順番に処理する
+   ================================================================ */
+let D = null;   // ホスト・ゲスト共通の 1vs1 情報
+let G = null;   // ゲストだけが持つ、その端末の中の状態
+const sw = p => p==='h' ? 'c' : p==='c' ? 'h' : p;
+const objOf = v => { if(Array.isArray(v)){ const o={}; v.forEach((x,i)=>{ if(x!=null) o[i]=x; }); return o; } return v||{}; };
+const clean = v => JSON.parse(JSON.stringify(v));   // undefined を落とす（Firebase は undefined を書けない）
+
+function duelGuestId(){
+  const host = D && D.host;
+  const l = playerList().filter(([k])=>k!==host);
+  return l.length ? l[0][0] : '';
+}
+function oppOnline(){
+  if(!D) return true;
+  const id = D.role==='host' ? D.guest : D.host;
+  return !!(id && O.players[id]);
+}
+
+/* ---------- 質問・記録の書き出しと読み込み ---------- */
+function serQ(q){ const o={a:q.spec.a}; if(q.spec.b){ o.b=q.spec.b; o.op=q.spec.op; } if(q.inq) o.inq=1; return o; }
+function deQ(o){ const q=specQ(o); if(o.inq) q.inq=true; return q; }
+function serRec(r, full){
+  if(r.kind!=='qa') return Object.assign({}, r);
+  const o={kind:'qa', asker:r.asker, ans:r.ans, q:serQ(r.q), type:r.type, status:r.status||''};
+  if(r.type==='weak') o.weak={wk:r.weak.key, wneg:!!r.weak.neg, text:r.weak.text, why:r.weak.why||''};
+  else o.said=!!r.said;
+  if(full){ o.truth=!!r.truth; o.lie=!!r.lie; }
+  return o;
+}
+function deRec(o){
+  if(o.kind!=='qa') return Object.assign({}, o);
+  const r={kind:'qa', asker:o.asker, ans:o.ans, q:deQ(o.q), type:o.type, status:o.status||''};
+  if(o.type==='weak') r.weak={key:o.weak.wk, neg:!!o.weak.wneg, text:o.weak.text, why:o.weak.why||'', set:weakSet(o.weak)};
+  else r.said=!!o.said;
+  if('truth' in o){ r.truth=!!o.truth; r.lie=!!o.lie; }
+  return r;
+}
+function matchOut(m){ return {games:m.games, no:m.no, pts:m.pts, results:m.results}; }
+/* 両者に見せてよい内容（対局が終わるまでは秘密の数・真偽・嘘の印を含めない） */
+function pubOf(){
+  const over = S.phase==='over';
+  return clean({
+    gid:S.gid, N:S.N, board:S.board, liesOn:S.liesOn,
+    turn:S.turn, first:S.first, phase:S.phase, turnNo:S.turnNo, skip:S.skip, asks:S.asks,
+    lies:S.lies, weak:S.weak, inq:S.inq, hint:S.hint||null, winner:S.winner||null,
+    pending:S.pending ? serQ(S.pending) : null,
+    hand:S.hand.c.map(c=>c.key),
+    recs:S.recs.map(r=>serRec(r, over)),
+    toast:(S.toast && typeof S.toast==='object') ? (S.toast.c||'') : '',
+    ev:S.ev||null, sec:over ? S.sec : null,
+    names:PN, match:matchOut(M)
+  });
+}
+/* ホストが読み込み直したときに再開するための控え（ホストだけが読める secret に置く） */
+function snapOf(){
+  return clean({
+    gid:S.gid, N:S.N, board:S.board, liesOn:S.liesOn, sec:S.sec,
+    hand:{h:S.hand.h.map(c=>c.key), c:S.hand.c.map(c=>c.key)},
+    lies:S.lies, weak:S.weak, inq:S.inq, hint:S.hint||null, hintDone:S.hintDone,
+    recs:S.recs.map(r=>serRec(r, true)), turn:S.turn, first:S.first, skip:S.skip, extra:S.extra,
+    turnNo:S.turnNo, phase:S.phase, pending:S.pending?serQ(S.pending):null, winner:S.winner||null,
+    asks:S.asks, marks:S.marks, cont:S.cont||null, match:matchOut(M), ev:S.ev||null,
+    guest:D.guest, gName:D.gName, names:PN
+  });
+}
+
+/* ---------- ホスト ---------- */
+function duelPublish(){
+  if(!D || D.role!=='host' || D.pubQ) return;
+  D.pubQ=true;
+  Promise.resolve().then(()=>{
+    D.pubQ=false;
+    if(!S || !S.online || S.guest || !O.code) return;
+    const body={phase:'game', set:pubSet(), g:pubOf()};
+    const js=JSON.stringify(body);
+    if(js!==D.lastPub){ D.lastPub=js; rref('state').set(body).catch(()=>{}); rref('secret').set({snap:snapOf()}).catch(()=>{}); }
+    duelReqs();
+  });
+}
+const pubSet = () => ({board:O.dset.board, N:O.dset.N, lies:O.dset.lies, games:O.dset.games});   // 秘密の数は送らない
+function duelLobbyState(){ if(O.code) rref('state').set({phase:'lobby', set:pubSet()}).catch(()=>{}); }
+function duelStart(){
+  D.guest=duelGuestId(); if(!D.guest) return;
+  D.gName=nameOf(D.guest);
+  const st=O.dset;
+  Object.assign(cfg, {N:st.N, board:st.board, lies:st.lies, games:st.games, mySecret:st.secret, lv:3});
+  O.scr='game'; D.lastPub='';
+  startMatch();
+}
+function duelReqs(){
+  if(!D || D.role!=='host') return;
+  const all=D.reqAll||{}, items=[];
+  Object.entries(all).forEach(([u,reqs])=>Object.entries(reqs||{}).forEach(([k,r])=>items.push({u,k,r:r||{}})));
+  items.sort((a,b)=>a.k<b.k?-1:a.k>b.k?1:0);
+  for(const it of items){
+    const id=it.u+'/'+it.k; if(D.done[id]) continue;
+    const r=it.r;
+    if(r.kind==='secret'){ D.done[id]=1; const n=parseInt(r.n,10); if(Number.isInteger(r.no)) D.gSec[it.u+':'+r.no]=n; continue; }
+    if(!S || !S.online || it.u!==D.guest || r.gid!==S.gid){ D.done[id]=1; continue; }
+    if(S.cut || S.phase==='wait') break;   // カットインが終わってから処理する
+    D.done[id]=1;
+    duelApply(r);
+  }
+}
+function duelApply(r){
+  const t=r.kind;
+  if(t==='ask'){
+    if(S.turn!=='c' || S.phase!=='remote') return;
+    const hand=S.hand.c;
+    const sel=toArr(r.sel).map(Number).filter(i=>Number.isInteger(i) && i>=0 && i<hand.length);
+    if(!sel.length || sel.length>2 || (sel.length===2 && sel[0]===sel[1])) return;
+    const q=compound(hand[sel[0]], sel[1]!=null?hand[sel[1]]:null, r.op==='or'?'or':'and');
+    if(r.inq && S.inq.c>0){ q.inq=true; S.inq.c--; }
+    useCards('c', sel.slice());
+    S.pending=q; S.phase='answer'; S.toast=''; render();
+  } else if(t==='guess'){
+    if(S.turn!=='c' || S.phase!=='remote') return;
+    const g=parseInt(r.g,10); if(!(g>=1 && g<=N)) return;
+    S.phase='wait'; S.toast=''; doGuess('c', g);
+  } else if(t==='doubt'){
+    if(S.turn!=='c' || S.phase!=='remote' || !S.liesOn) return;
+    const i=parseInt(r.i,10); if(!S.recs[i] || !doubtable(S.recs[i],'h')) return;
+    S.phase='wait'; S.toast=''; doDoubt('c', i);
+  } else if(t==='answer'){
+    if(S.phase!=='await' || !S.pending) return;
+    const q=S.pending;
+    if(r.type==='honest') applyAnswer('h','honest');
+    else if(r.type==='lie'){ if(!S.liesOn || S.lies.c<=0 || q.inq) return; applyAnswer('h','lie'); }
+    else if(r.type==='weak'){
+      if(S.weak.c<=0 || q.inq || !r.w) return;
+      const op=weakOptions(q, S.sec.c).find(o=>o.key===r.w.key && !!o.neg===!!r.w.neg);
+      if(op) applyAnswer('h','weak',op);
+    }
+  }
+}
+/* ホストが読み込み直したとき：控えから対局を復元する */
+function duelResume(snap){
+  N=snap.N; buildLib();
+  D.guest=snap.guest; D.gName=snap.gName; PN=snap.names||PN; NAME.c=D.gName;
+  const k2c=a=>toArr(a).map(keyToCard).filter(Boolean);
+  M=Object.assign({}, snap.match, {results:toArr(snap.match.results)});
+  S={N, lv:3, board:snap.board, sec:snap.sec, hand:{h:k2c(snap.hand.h), c:k2c(snap.hand.c)},
+    lies:snap.lies, weak:snap.weak, inq:snap.inq, liesOn:!!snap.liesOn, cut:null, hint:snap.hint||null, hintDone:!!snap.hintDone,
+    recs:toArr(snap.recs).map(deRec), turn:snap.turn, first:snap.first, skip:snap.skip, extra:!!snap.extra, turnNo:snap.turnNo,
+    phase:snap.phase, sel:[], op:'and', inqOn:false, pending:snap.pending?deQ(snap.pending):null, winner:snap.winner||null,
+    toast:'', asks:snap.asks, marks:objOf(snap.marks), restore:null, rv:null, online:true, gid:snap.gid, ev:snap.ev||null};
+  O.scr='game';
+  if(S.phase==='over'){ S.rv={k:S.recs.length, X:'c'}; render(); return; }
+  if(S.phase==='doubt' || S.phase==='restore') S.phase='act';
+  const c=snap.cont;
+  if(S.phase==='wait' && c){
+    if(c.k==='end') return endTurn(c.who);
+    if(c.k==='start') return startTurn(c.p);
+    if(c.k==='over') return finishGame(c.who);
+  }
+  render();
+}
+
+/* ---------- ゲスト ---------- */
+function guestSend(body){
+  if(!G || G.wait) return;
+  G.wait=true;
+  const k=String(Date.now()).padStart(15,'0')+'_'+(O.seq++);
+  body.gid = G.pub ? G.pub.gid : 0;
+  rref(`req/${uid}/${k}`).set(clean(body)).catch(()=>{ G.wait=false; G.toast='送信できませんでした。もう一度'; render(); });
+  clearTimeout(G.waitT);
+  G.waitT=setTimeout(()=>{ if(G && G.wait){ G.wait=false; G.toast='ホストから返事がありません。通信を確認してください'; render(); } }, 10000);
+  render();
+}
+function guestSecret(no, v){
+  const n=parseInt(v,10);
+  if(!(n>=1 && n<=((G&&G.pub&&G.pub.N)||O.dset.N))){ G.secMsg='範囲内の数を入れてください'; oRender(); return; }
+  const k=String(Date.now()).padStart(15,'0')+'_'+(O.seq++);
+  rref(`req/${uid}/${k}`).set({kind:'secret', no, n}).then(()=>{ G.sentSec[no]=n; G.secMsg=''; render(); }).catch(()=>{});
+}
+/* 公開された状態を、ゲストの目線（自分＝h、ホスト＝c）に組み直す */
+function guestView(pub){
+  if(N!==pub.N){ N=pub.N; buildLib(); }
+  PN = {h:(pub.names&&pub.names.c)||'あなた', c:(pub.names&&pub.names.h)||'ホスト'};
+  NAME.c = PN.c;
+  const mySec = G.secs[pub.gid];
+  const swapRec = r => {
+    const o=Object.assign({}, r);
+    ['asker','ans','who','target'].forEach(k=>{ if(k in o) o[k]=sw(o[k]); });
+    if(o.kind==='qa' && o.type!=='weak' && !('truth' in o)){
+      if(o.ans==='h' && mySec) { o.truth=!!o.q.set[mySec]; o.lie = o.said!==o.truth; }
+      else if(o.status==='revealed') o.truth=!o.said;
+    }
+    return o;
+  };
+  const m=pub.match||{games:1,no:1,pts:{h:0,c:0},results:[]};
+  M={games:m.games, no:m.no, pts:{h:m.pts.c, c:m.pts.h}, results:toArr(m.results).map(x=>Object.assign({}, x, {winner:sw(x.winner)}))};
+  const two = o => o ? {h:o.c, c:o.h} : {h:0, c:0};
+  const V={
+    guest:true, online:true, gid:pub.gid, N:pub.N, lv:3, board:pub.board, liesOn:!!pub.liesOn,
+    sec: pub.sec ? {h:pub.sec.c, c:pub.sec.h} : {h:mySec||'…', c:null},
+    hand:{h:toArr(pub.hand).map(keyToCard).filter(Boolean), c:[]},
+    lies:two(pub.lies), weak:two(pub.weak), inq:two(pub.inq),
+    hint: pub.hint ? {h:pub.hint.c, c:pub.hint.h, at:pub.hint.at} : null, hintDone:!!pub.hint,
+    recs: toArr(pub.recs).map(deRec).map(swapRec),
+    turn:sw(pub.turn), first:sw(pub.first), turnNo:two(pub.turnNo), skip:two(pub.skip), asks:two(pub.asks),
+    winner: pub.winner ? sw(pub.winner) : null,
+    toast: G.toast ? {h:G.toast} : (pub.toast ? {h:pub.toast} : ''),
+    pending: pub.pending ? deQ(pub.pending) : null,
+  };
+  // その端末の中だけの状態（選んだカード・消した数など）は G に置き、V から読み書きする
+  ['sel','op','inqOn','marks','restore','rv','cut','_opsShown','_opsFor'].forEach(k=>Object.defineProperty(V, k, {get:()=>G[k], set:v=>{ G[k]=v; }, enumerable:true}));
+  Object.defineProperty(V, 'phase', {enumerable:true,
+    get:()=>{
+      const p=pub.phase;
+      if(p==='over') return 'over';
+      if(p==='remote') return G.wait ? 'wait' : G.restore ? 'restore' : G.doubt ? 'doubt' : 'act';
+      if(p==='await') return G.wait ? 'wait' : 'answer';
+      if(p==='answer') return 'await';
+      if(p==='wait') return 'wait';
+      return 'remote';
+    },
+    set:v=>{ if(v==='doubt') G.doubt=true; else if(v==='act') G.doubt=false; }
+  });
+  return V;
+}
+function guestOnState(s){
+  if(!s || s.phase==='lobby' || !s.g){
+    if(s && s.set) O.dset=Object.assign({}, O.dset, s.set);
+    if(s && s.phase==='closed'){ O.err='ホストが部屋を閉じました'; leaveRoom(); return; }
+    S=null; O.scr='lobby'; oRender(); return;
+  }
+  if(s.set) O.dset=Object.assign({}, O.dset, s.set);
+  const pub=s.g, prev=G.pub;
+  if(!prev || prev.gid!==pub.gid){
+    // 新しい試合
+    G.sel=[]; G.op='and'; G.inqOn=false; G.marks={}; G.restore=null; G.rv=null; G.doubt=false; G.seenDoubt={};
+    view='opp'; hidden=false; showMe=false;
+  }
+  G.pub=pub; G.wait=false; G.toast='';
+  if(!prev || prev.turn!==pub.turn || prev.phase!==pub.phase) G.doubt=false;
+  const first = !prev;
+  O.scr='game';
+  S=guestView(pub);
+  // ダウト成功：その嘘のあと（次の答えまで）に自分で消した数を戻すか聞く
+  S.recs.forEach((r,i)=>{
+    if(r.kind==='doubt' && r.who==='h' && r.ok && !G.seenDoubt[i]){
+      G.seenDoubt[i]=1;
+      if(!first && S.board==='normal'){
+        const nums=Object.keys(G.marks).map(Number).filter(n=>G.marks[n]===r.idx).sort((a,b)=>a-b);
+        if(nums.length) G.restore={idx:r.idx, nums};
+      }
+    }
+  });
+  if(S.phase==='over' && !G.rv) G.rv={k:S.recs.length, X:'c'};
+  const ev=pub.ev;
+  if(ev && ev.id && ev.id!==G.lastEv){
+    const fresh = G.lastEv!==0 || !first;
+    G.lastEv=ev.id;
+    if(fresh && ev.cut){
+      G.cut=Object.assign({}, ev.cut);
+      clearTimeout(cutTimer); cutTimer=setTimeout(()=>{ if(G){ G.cut=null; render(); } }, ev.cut.ms||2600);
+    }
+  }
+  render();
+  if(S.phase==='restore'){ const el=document.getElementById('rsYes'); if(el && el.scrollIntoView) el.scrollIntoView({block:'center'}); }
+}
+
+/* ---------- 部屋の出入り（1vs1） ---------- */
+function duelEnter(){
+  D={role:O.isHost?'host':'guest', host:O.isHost?uid:O.hostId, guest:'', gName:'', gSec:{}, done:{}, reqAll:{}, lastPub:''};
+  G = O.isHost ? null : {pub:null, secs:{}, sentSec:{}, sel:[], op:'and', inqOn:false, marks:{}, restore:null, rv:null, cut:null, doubt:false, wait:false, toast:'', lastEv:0, seenDoubt:{}, secMsg:''};
+  PN={h:'あなた', c:'相手'}; NAME.c='相手'; S=null; M=null;
+  // ホストも名簿に入る（相手から「切断中」が分かるように）
+  const me=rref('players/'+uid);
+  me.set({name:O.nick||(O.isHost?'ホスト':'なまえなし'), joinedAt:TS()}).catch(()=>{});
+  me.onDisconnect().remove();
+  if(O.isHost){
+    const rq=rref('req'), fn=s=>{ D.reqAll=s.val()||{}; duelReqs(); };
+    rq.on('value', fn, ()=>{}); O.unsub.push(()=>rq.off('value', fn));
+    // 読み込み直したときは控えから再開。古いリクエストは処理済みにする
+    Promise.all([rref('secret').get(), rq.get(), rref('state').get()]).then(([sn, rs, stv])=>{
+      Object.entries(rs.val()||{}).forEach(([u,reqs])=>Object.keys(reqs||{}).forEach(k=>{ const r=(reqs[k]||{}); if(r.kind==='secret' && Number.isInteger(r.no)) D.gSec[u+':'+r.no]=parseInt(r.n,10); D.done[u+'/'+k]=1; }));
+      const v=sn.val();
+      const cur=stv.val();
+      if(v && v.snap && v.snap.gid && cur && cur.phase==='game') duelResume(v.snap);
+      else duelLobbyState();
+    }).catch(()=>duelLobbyState());
+  } else {
+    const rs=rref('res/'+uid), fn=s=>{ const v=s.val()||{}; if(v.sec && v.sec.gid){ G.secs[v.sec.gid]=v.sec.n; if(G.pub) guestOnState(O.st); } };
+    rs.on('value', fn, ()=>{}); O.unsub.push(()=>rs.off('value', fn));
+  }
+}
+function duelLeave(){
+  if(O.isHost && O.code) rref('state').set({phase:'closed'}).catch(()=>{});
+  if(O.code && uid){ const r=rref('players/'+uid); r.onDisconnect().cancel(); r.remove().catch(()=>{}); }
+  clearTimeout(cutTimer);
+  S=null; M=null; D=null; G=null;
+  leaveRoom();
+}
+function duelLobby(){
+  const st=O.dset, host=O.isHost;
+  const gid=duelGuestId(), others=playerList().filter(([k])=>k!==(D&&D.host));
+  const segs = host ? `
+    <span class="cap">モード</span>${seg('dB',[['easy','イージー'],['normal','ノーマル']],st.board)}
+    <p class="dim" style="font-size:.82rem">${st.board==='easy'?'イージー：相手の答えと矛盾する数が自動で消える。':'ノーマル：盤面の数を自分でタップして消す（もう一度タップで戻る）。'}</p>
+    <span class="cap">数の範囲</span>${seg('dN',[[30,'1〜30'],[50,'1〜50'],[100,'1〜100']],st.N)}
+    <span class="cap">嘘</span>${seg('dL',[[true,'嘘あり'],[false,'嘘なし']],st.lies)}
+    <span class="cap">勝負の数</span>${seg('dG',[[1,'1本勝負'],[2,'2本勝負'],[3,'3本勝負']],st.games)}
+    <span class="cap">あなたの秘密の数（第1戦）</span>
+    <div class="guess"><input type="number" id="secIn" min="1" max="${st.N}" placeholder="おまかせ" value="${esc(st.secret||'')}"><span class="dim" style="font-size:.85rem">相手に見えないように入力</span></div>`
+  : `<p class="dim" style="font-size:.88rem">ルール：${st.board==='easy'?'イージー':'ノーマル'} ・ 1〜${st.N} ・ ${st.lies?'嘘あり':'嘘なし'} ・ ${st.games}本勝負</p>
+    <span class="cap">あなたの秘密の数（第1戦）</span>
+    <div class="guess"><input type="number" id="gSecIn" min="1" max="${st.N}" placeholder="おまかせ"><button class="ghost" id="gSecBtn">この数にする</button></div>
+    <p class="dim" style="font-size:.82rem">${G && G.sentSec[1] ? `決定済み：<b class="num">${G.sentSec[1]}</b>（変えるときはもう一度）` : '決めなければ自動で決まります'}</p>
+    ${G && G.secMsg ? `<p class="warn">${esc(G.secMsg)}</p>`:''}`;
+  app.innerHTML=`
+<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs 1 ・ オンライン</span></header>
+  <section class="panel">
+    <span class="cap">部屋コード</span>
+    <p class="roomcode num">${esc(O.code)}</p>
+    <p class="dim" style="text-align:center;font-size:.85rem">${host?'相手はメニューの「1 vs 1（オンライン）」から、このコードで参加します':'ホストが始めるのを待っています…'}</p>
+  </section>
+  <section class="panel">
+    <span class="cap">対戦相手</span>
+    <ul class="plist" id="lobbyList">${host ? (gid?`<li>${esc(nameOf(gid))}</li>`:'<li class="dim">まだ来ていません</li>') : `<li>${esc(D&&D.host?nameOf(D.host):'ホスト')}（ホスト）</li>`}</ul>
+    ${host && others.length>1 ? `<p class="dim" style="font-size:.82rem">${others.length-1}人が見ているだけになります（対戦できるのは先に入った1人）</p>`:''}
+  </section>
+</div><div class="col"><section class="panel">${segs}</section>
+  ${host?`<button class="btn wide" id="startBtn" ${gid?'':'disabled'}>対戦を始める</button>`:''}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div>`;
+  const $=id=>document.getElementById(id);
+  if(host){
+    const bind=(id,key,conv)=>document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{ st[key]=conv(b.dataset.v); duelLobbyState(); oRender(); });
+    bind('dB','board',v=>v); bind('dN','N',Number); bind('dL','lies',v=>v==='true'); bind('dG','games',Number);
+    $('secIn').oninput=()=>{ st.secret=$('secIn').value; };
+    $('startBtn').onclick=duelStart;
+  } else {
+    $('gSecBtn').onclick=()=>guestSecret(1, $('gSecIn').value);
+  }
+  $('leaveBtn').onclick=duelLeave;
+}
+
 /* ================= メニュー ================= */
 let fbStarted=false;
 function goMenu(){
-  clearTimeout(cutTimer); S=null;
+  clearTimeout(cutTimer); S=null; M=null; D=null; G=null; O.on=false;
   app.innerHTML=`
   <header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">真か、偽か、それとも嘘か</span></header>
   <section class="panel menu">
-    <button class="btn wide" id="mCpu">1 vs 1<small>CPUと対戦（ひとりで練習）</small></button>
-    <button class="btn wide alt" id="mOnline">1 vs n<small>オンライン ・ 1 ≦ n ≦ ${MAX_PLAYERS}<br>n = 1 ならオンラインで1対1の対戦</small></button>
+    <button class="btn wide" id="mCpu">vs CPU<small>オフライン ・ CPUと対戦（ひとりで練習）</small></button>
+    <button class="btn wide alt" id="mDuel">1 vs 1<small>オンライン ・ CPU戦と同じルールで友だちと対戦</small></button>
+    <button class="btn wide alt" id="mOnline">ホスト vs チャレンジャー<small>オンライン ・ ホスト1人に、チャレンジャー${MAX_PLAYERS}人まで</small></button>
   </section>`;
   document.getElementById('mCpu').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
-  document.getElementById('mOnline').onclick=()=>{ if(!fbStarted){ fbStarted=true; fbInit(); } O.scr='home'; oRender(); window.scrollTo(0,0); };
+  const online=kind=>{ if(!fbStarted){ fbStarted=true; fbInit(); } O.kind=kind; O.on=true; O.err=''; O.scr='home'; oRender(); window.scrollTo(0,0); };
+  document.getElementById('mDuel').onclick=()=>online('duel');
+  document.getElementById('mOnline').onclick=()=>online('class');
 }
 goMenu();
 
