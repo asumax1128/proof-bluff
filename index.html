@@ -1,0 +1,1669 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PROOF BLUFF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Rubik+Glitch&family=Zen+Antique&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+
+/* Layout: 緑のフェルトのカードテーブル。上に状況、中央に候補の盤面、下に手札と操作。単一テーマ。 */
+:root{
+  color-scheme:dark;
+  --felt:#141414; --felt-dk:#050505; --rail:#ffffff;
+  --card:#f4f4f4; --card-dk:#cfcfcf; --ink:#111111; --ink-dim:#5c5c5c;
+  --text:#f2f2f2; --dim:#a6a6a6; --line:rgba(255,255,255,.2);
+  --red:#b8382c; --blue:#2d5d9a; --ok:#7fd69a; --bad:#ff9f8f;
+  --f-disp:"Zen Antique","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  background:radial-gradient(ellipse 110% 80% at 50% 20%,#2a2a2a,var(--felt) 45%,var(--felt-dk));
+  background-color:var(--felt);
+  color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.65;
+  padding-inline:16px;padding-block:20px 48px;
+}
+.wrap{max-width:600px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+p{margin:0}
+.dim{color:var(--dim)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+h1{font-family:var(--f-disp);font-weight:400;font-size:clamp(2.4rem,12vw,3.4rem);margin:0;line-height:1.1;letter-spacing:.08em;text-align:center}
+h2{font-family:var(--f-disp);font-weight:400;font-size:1.3rem;margin:0;letter-spacing:.04em}
+.title{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:14px 4px}
+.title .suit{color:var(--rail);letter-spacing:.6em;font-size:.9rem;padding-left:.6em}
+.title .sub{color:var(--dim);font-size:.85rem;letter-spacing:.15em}
+
+.panel{border:1px solid var(--line);border-radius:12px;padding:14px;background:rgba(0,0,0,.18);display:flex;flex-direction:column;gap:10px;min-width:0}
+.cap{font-size:.75rem;letter-spacing:.14em;color:var(--rail);font-weight:700}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+
+button{font:inherit;cursor:pointer;min-height:44px;border-radius:8px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--rail);outline-offset:2px}
+.btn{background:var(--rail);color:#111;border:none;font-weight:700;padding:8px 16px}
+.btn.wide{width:100%;font-size:1.05rem}
+.btn:disabled{opacity:.4;cursor:default}
+.ghost{background:transparent;color:var(--text);border:1px solid var(--line);padding:8px 14px}
+.ghost:disabled{opacity:.4;cursor:default}
+.seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:6px}
+.seg button{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);border-color:var(--card)}
+input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:var(--ink);background:var(--card);border:none;border-radius:8px;padding:8px 10px;min-height:44px;width:7.5em;min-width:0}
+
+/* ステータス */
+.status{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.who{border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);min-width:0}
+.who.on{border-color:var(--rail);box-shadow:0 0 0 1px var(--rail) inset}
+.who .name{font-weight:700;font-size:.9rem}
+.who .secret{font-family:var(--f-num);font-size:1.8rem;font-weight:600;line-height:1.2}
+.who .meta{font-size:.78rem;color:var(--dim)}
+.turn{font-family:var(--f-disp);font-size:1.15rem;text-align:center}
+
+/* 候補の盤面 */
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;background:transparent;color:var(--dim);border:1px solid var(--line);font-size:.85rem;padding:4px 8px}
+.tabs button[aria-pressed="true"]{color:var(--text);border-color:var(--rail)}
+.grid{display:grid;gap:3px}
+.cell{aspect-ratio:1;border-radius:4px;display:grid;place-items:center;font-family:var(--f-num);font-size:.72rem;background:var(--card);color:var(--ink);font-weight:600}
+.cell.out{background:transparent;color:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.grid.tiny{gap:1px}
+.grid.tiny .cell{border-radius:1px;font-size:0}
+.count{font-family:var(--f-num);font-size:1.3rem;font-weight:600;color:var(--card)}
+.warn{color:var(--bad);font-weight:700;font-size:.9rem}
+
+/* 手札 */
+.hand{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.pcard{background:var(--card);color:var(--ink);border:2px solid var(--card-dk);border-radius:10px;padding:10px 8px;min-height:72px;font-weight:700;font-size:.95rem;line-height:1.35;text-align:center;position:relative;box-shadow:0 3px 0 rgba(0,0,0,.35)}
+.pcard::before{content:"n は";display:block;font-size:.68rem;color:var(--ink-dim);font-weight:500}
+.pcard[aria-pressed="true"]{border-color:var(--red);transform:translateY(-4px);box-shadow:0 7px 0 rgba(0,0,0,.35)}
+.pcard:disabled{opacity:.55;cursor:default}
+.ops{display:flex;gap:6px}
+.ops button{flex:1;background:transparent;color:var(--text);border:1px solid var(--line);font-weight:700}
+.ops button[aria-pressed="true"]{background:var(--red);border-color:var(--red)}
+.qpreview{background:var(--card);color:var(--ink);border-radius:10px;padding:10px 12px;font-weight:700}
+.qpreview small{display:block;font-weight:500;color:var(--ink-dim)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions > *{flex:1 1 140px}
+.guess{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* 回答 */
+.ask{background:var(--card);color:var(--ink);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ask .q{font-size:1.15rem;font-weight:700}
+.ask .truth{font-size:.88rem;color:var(--ink-dim)}
+.ans{display:flex;flex-direction:column;gap:8px}
+.ans button{text-align:left;padding:10px 12px;border:2px solid var(--card-dk);background:#ffffff;color:var(--ink);font-weight:700}
+.ans button small{display:block;font-weight:500;color:var(--ink-dim);font-size:.8rem}
+.ans button.lie{border-color:var(--red);color:var(--red)}
+.ans button:disabled{opacity:.4;cursor:default}
+.ans .cap{color:var(--ink-dim)}
+
+/* ログ */
+.log{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.log li{border-left:3px solid var(--line);padding:4px 0 4px 10px;font-size:.9rem;display:flex;flex-direction:column;gap:2px}
+.log li.me{border-left-color:var(--rail)}
+.log .qt{font-weight:700}
+.log .at{color:var(--dim)}
+.log .why{font-size:.78rem;color:var(--dim)}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;border-radius:4px;padding:0 6px;margin-left:4px;vertical-align:1px}
+.tag.lie{background:var(--red);color:#fff}
+.tag.true{background:var(--ok);color:#0b2a1b}
+.tag.weak{background:var(--blue);color:#fff}
+.doubt-btn{align-self:flex-start;background:var(--red);color:#fff;border:none;font-weight:700;padding:4px 12px;min-height:36px;margin-top:4px}
+
+.cutin{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(0,0,0,.93);padding:24px;cursor:pointer;border:none;width:100%;color:var(--text);font:inherit}
+.cutin .band{width:min(560px,100%);display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 16px;border-block:3px solid var(--rail);background:linear-gradient(90deg,transparent,rgba(24,24,24,.98) 12%,rgba(24,24,24,.98) 88%,transparent)}
+.cutin .who2{font-size:.9rem;letter-spacing:.14em;color:var(--rail);font-weight:700}
+.cutin .big{font-family:var(--f-disp);font-size:clamp(4.5rem,24vw,8rem);line-height:1;letter-spacing:.08em}
+.cutin .big.yes{color:var(--ok)} .cutin .big.no{color:var(--bad)} .cutin .big.weak{color:#9cc0f0} .cutin .big.info{color:var(--card)}
+.cutin .line{font-weight:700;font-size:1.05rem;text-align:center;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
+.cutin .hint{font-size:.78rem;color:var(--dim)}
+@media (prefers-reduced-motion: no-preference){
+  .cutin .band{animation:slide .35s cubic-bezier(.2,.9,.3,1.2)}
+  .cutin .big{animation:stamp .4s .1s both cubic-bezier(.2,.9,.3,1.4)}
+  @keyframes slide{from{transform:translateX(-30%);opacity:0}to{transform:none;opacity:1}}
+  @keyframes stamp{from{transform:scale(1.8);opacity:0}to{transform:none;opacity:1}}
+}
+.boardhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.peek{background:transparent;color:var(--text);border:1px solid var(--line);font-size:.85rem;padding:4px 12px;min-height:36px}
+.veil{border:1px dashed var(--line);border-radius:8px;padding:18px;text-align:center;color:var(--dim);font-size:.9rem;background:transparent;width:100%}
+.who .hint{font-size:.78rem;font-weight:700;border-radius:4px;padding:1px 6px;align-self:flex-start;background:var(--ok);color:#0b2a1b;margin-top:2px}
+.who .hint.on{background:var(--red);color:#fff}
+.toast{background:var(--card);color:var(--ink);border-radius:10px;padding:10px 12px;font-weight:700}
+.result h2{font-size:2rem;text-align:center}
+.rules{display:flex;flex-direction:column;gap:6px;margin:0;padding-left:1.2em}
+.rules li{font-size:.9rem}
+@media (prefers-reduced-motion: no-preference){
+  .pcard{transition:transform .12s ease}
+  .pop{animation:pop .25s ease}
+  @keyframes pop{from{transform:translateY(4px);opacity:.4}to{transform:none;opacity:1}}
+}
+
+
+/* ---- 画面の組み方：スマホは縦1列、タブレット以上は左右2列でページをスクロールさせない ---- */
+.cols,.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (min-width:760px) and (min-height:560px){
+  html,body{height:100%}
+  body:has(.cols){overflow:hidden;padding-block:12px}
+  body:has(.cols) .wrap{max-width:1280px;height:100%}
+  .cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;height:100%;min-height:0}
+  .col{overflow-y:auto;min-height:0;padding-right:4px;scrollbar-width:thin}
+  .col > .panel.grow{flex:1 1 auto;min-height:110px;overflow:hidden}
+  .col > .panel.grow .log,.col > .panel.grow .tblwrap{overflow-y:auto;min-height:0;flex:1 1 auto}
+  .col > *{flex-shrink:0}
+  .col > .panel.grow{flex-shrink:1}
+  .title{padding-block:4px 0}
+  .pcard{min-height:64px;padding:8px 6px;font-size:.9rem}
+}
+@media (min-width:1000px) and (min-height:560px){ .hand{grid-template-columns:repeat(5,minmax(0,1fr))} }
+/* ---- オンライン ---- */
+.tiebtn{text-align:left;padding:12px 14px;border:2px solid var(--card-dk);background:var(--card);color:var(--ink);font-weight:700;font-size:1.05rem}
+.tiebtn small{display:block;font-weight:500;color:var(--ink-dim);font-size:.8rem}
+.tiebtn:disabled{opacity:.5}
+.tieitem{margin:0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-weight:700}
+.tieitem small{color:var(--dim);font-weight:500}
+.panel > .hint{align-self:flex-start;font-size:.8rem;font-weight:700;border-radius:4px;padding:1px 8px;background:var(--ok);color:#0b2a1b}
+.panel > .hint.on{background:var(--red);color:#fff}
+.txt{font:inherit;font-size:1.05rem;color:var(--ink);background:var(--card);border:none;border-radius:8px;padding:8px 12px;min-height:44px;width:100%;min-width:0}
+.code-in{font-family:var(--f-num);letter-spacing:.3em;text-align:center;flex:1;width:auto}
+.roomcode{font-family:var(--f-num);font-size:3.2rem;font-weight:600;letter-spacing:.25em;text-align:center;color:var(--card);margin:0;padding-left:.25em}
+.plist{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.plist li{border:1px solid var(--line);border-radius:999px;padding:2px 12px;font-size:.88rem}
+.plist li.me{border-color:var(--rail);color:var(--rail)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.chip{font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:2px 12px}
+.timer{font-weight:600;color:var(--rail)}
+.big-num{font-size:3rem;font-weight:600;margin:0;text-align:center;color:var(--card)}
+.big-num small{font-size:1rem;color:var(--dim)}
+.q-big{font-size:1.5rem;font-weight:700;text-align:center;margin:0}
+.big-veil{padding:28px 16px;font-size:1rem;color:var(--text)}
+.big-veil small{color:var(--dim)}
+.tblwrap{overflow-x:auto}
+table.rank{width:100%;border-collapse:collapse;font-size:.9rem}
+.rank th,.rank td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.rank th{font-size:.75rem;color:var(--dim)}
+.rank tr.me td{color:var(--rail);font-weight:700}
+.ok-msg{font-weight:700;color:var(--ok);text-align:center;margin:0}
+.meta-r{font-size:.8rem;color:var(--dim)}
+.menu{gap:12px}
+.menu .btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px}
+.menu .btn small{font-weight:500;font-size:.8rem;opacity:.8}
+.menu .btn.alt{background:var(--card)}
+
+/* ---- ロゴ：PROOF（優美）／BLUFF（激しい） ---- */
+.logo{display:flex;flex-direction:column;align-items:center;line-height:.9;margin:0;gap:2px}
+.logo .proof{font-family:"Cormorant Garamond","Times New Roman",serif;font-style:italic;font-weight:600;font-size:clamp(3rem,15vw,4.6rem);letter-spacing:.12em;padding-left:.12em;color:var(--text)}
+.logo .bluff{font-family:"Rubik Glitch","Impact","Arial Black",sans-serif;font-weight:400;font-size:clamp(3.4rem,17vw,5.2rem);letter-spacing:.04em;color:var(--text);transform:skewX(-6deg)}
+.logo.sm .proof{font-size:2.2rem} .logo.sm .bluff{font-size:2.5rem}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+(function(){
+/* ============ 設定 ============ */
+const MODES = {30:{lies:1,weak:2}, 50:{lies:1,weak:2}, 100:{lies:2,weak:3}, 1000:{lies:2,weak:3}};
+const HAND = 5;
+const app = document.getElementById('app');
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ============ 集合 ============ */
+let N = 50;
+const mk = fn => { const s=new Uint8Array(N+1); for(let n=1;n<=N;n++) s[n]=fn(n)?1:0; return s; };
+const cnt = s => { let c=0; for(let n=1;n<=N;n++) c+=s[n]; return c; };
+const AND = (a,b)=>mk(n=>a[n]&&b[n]);
+const OR  = (a,b)=>mk(n=>a[n]||b[n]);
+const NOT = a=>mk(n=>!a[n]);
+const ALL = ()=>mk(()=>1);
+const strictSub = (a,b)=>{ let ca=0, cb=0; for(let n=1;n<=N;n++){ if(a[n]&&!b[n]) return false; ca+=a[n]; cb+=b[n]; } return cb>ca; };
+const isPrime = n=>{ if(n<2) return false; for(let d=2;d*d<=n;d++) if(n%d===0) return false; return true; };
+const isSq = n=>Math.round(Math.sqrt(n))**2===n;
+const isCube = n=>Math.round(Math.cbrt(n))**3===n;
+
+/* ============ 命題 ============ */
+// label: 「n は ○○」の○○ / neg: 否定
+const P = {
+  mult:k=> k===2 ? {key:'m2', label:'偶数', neg:'奇数', set:mk(n=>n%2===0)} : {key:'m'+k, label:`${k}の倍数`, neg:`${k}の倍数でない`, set:mk(n=>n%k===0)},
+  odd:()=>({key:'odd', label:'奇数', neg:'偶数', set:mk(n=>n%2===1)}),
+  prime:()=>({key:'pr', label:'素数', neg:'素数でない', set:mk(isPrime)}),
+  sq:()=>({key:'sq', label:'平方数', neg:'平方数でない', set:mk(isSq)}),
+  cube:()=>({key:'cu', label:'立方数', neg:'立方数でない', set:mk(isCube)}),
+  ge:k=>({key:'ge'+k, label:`${k}以上`, neg:`${k}未満`, set:mk(n=>n>=k)}),
+  le:k=>({key:'le'+k, label:`${k}以下`, neg:`${k}より大きい`, set:mk(n=>n<=k)}),
+  last:d=>({key:'l'+d, label:`一の位が${d}`, neg:`一の位が${d}でない`, set:mk(n=>n%10===d)}),
+  mod:(k,r)=>({key:`r${k}_${r}`, label:`${k}で割ると${r}余る`, neg:`${k}で割ると${r}余らない`, set:mk(n=>n%k===r)}),
+};
+let LIB = [];
+function buildLib(){
+  const L=[];
+  const ks=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,24,25,30,40,50,100,200,250,500].filter(k=>k*2<=N);
+  ks.forEach(k=>L.push(P.mult(k)));
+  L.push(P.odd(), P.prime(), P.sq());
+  if(N>=100) L.push(P.cube());
+  const step = N<=50 ? 1 : N<=100 ? 5 : 50;
+  for(let k=1+step;k<=N;k+=step){ L.push(P.ge(k)); L.push(P.le(k-1)); }
+  if(N>=20) for(let d=0;d<=9;d++) L.push(P.last(d));
+  [3,4,5].forEach(k=>{ for(let r=1;r<k;r++) L.push(P.mod(k,r)); });
+  LIB = L.filter(p=>{ const c=cnt(p.set); return c>0 && c<N; });
+}
+function drawCard(){
+  for(let t=0;t<40;t++){
+    const ks=[2,3,4,5,6,7,8,9,10,12,15,20,25,50,100].filter(k=>k*3<=N);
+    const kinds=[['mult',4],['ge',1.6],['le',1],['prime',1],['sq',.9],['last',N>=20?1:0],['mod',1.2],['cube',N>=100?.5:0]];
+    let r=Math.random()*kinds.reduce((a,b)=>a+b[1],0), kind='mult';
+    for(const [k,w] of kinds){ r-=w; if(r<0){ kind=k; break; } }
+    let c;
+    if(kind==='mult') c=P.mult(pick(ks));
+    else if(kind==='ge') c=P.ge(rint(Math.ceil(N*.15), Math.floor(N*.85)));
+    else if(kind==='le') c=P.le(rint(Math.ceil(N*.15), Math.floor(N*.85)));
+    else if(kind==='prime') c=P.prime();
+    else if(kind==='sq') c=P.sq();
+    else if(kind==='cube') c=P.cube();
+    else if(kind==='last') c=P.last(rint(0,9));
+    else { const k=pick([3,4,5]); c=P.mod(k, rint(1,k-1)); }
+    const n=cnt(c.set); if(n>0 && n<N) return c;
+  }
+  return P.mult(2);
+}
+/* 同じカード（同じ集合、または「偶数」と「奇数」のような裏返し）は手札に1枚まで */
+function sameSet(a,b){ let eq=true, cp=true; for(let n=1;n<=N;n++){ if(a[n]!==b[n]) eq=false; else cp=false; if(!eq&&!cp) return false; } return true; }
+const dup = (c, hand) => hand.some(h=>sameSet(h.set,c.set));
+/* 候補を2つに分けられるカード（「はい」でも「いいえ」でも候補が減る）か */
+function splits(c, cs){ const t=cnt(cs); if(t<=1) return true; const y=cnt(AND(cs,c.set)); return y>0 && y<t; }
+function drawFor(hand, cs){
+  for(let t=0;t<300;t++){ const c=drawCard(); if(!dup(c,hand) && splits(c,cs)) return c; }
+  // 見つからないときは、残りの候補の真ん中で区切る大小カードを作る
+  const l=[]; for(let n=1;n<=N;n++) if(cs[n]) l.push(n);
+  if(l.length>=2){
+    const m=l[Math.floor(l.length/2)];
+    for(const c of [P.ge(m), P.le(l[Math.floor(l.length/2)-1])]) if(!dup(c,hand) && splits(c,cs)) return c;
+    for(let i=1;i<l.length;i++){ const c=P.ge(l[i]); if(!dup(c,hand)) return c; }
+  }
+  for(let t=0;t<300;t++){ const c=drawCard(); if(!dup(c,hand)) return c; }
+  return drawCard();
+}
+/* 手札を整える：役に立たないカードを捨てて、重ならない有効なカードで5枚にする */
+function refreshHand(p){
+  let cs=cand(other(p)); if(cnt(cs)===0) cs=ALL();
+  const keep=[];
+  for(const c of S.hand[p]) if(!dup(c,keep) && splits(c,cs)) keep.push(c);
+  while(keep.length<HAND) keep.push(drawFor(keep, cs));
+  S.hand[p]=keep;
+}
+function compound(a,b,op){
+  const thr = k=>/^(ge|le)/.test(k);
+  if(!b) return {label:a.label, neg:a.neg, set:a.set, thr:thr(a.key)};
+  return op==='and'
+    ? {label:`${a.label} かつ ${b.label}`, neg:`${a.neg} または ${b.neg}`, set:AND(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key)}
+    : {label:`${a.label} または ${b.label}`, neg:`${a.neg} かつ ${b.neg}`, set:OR(a.set,b.set), compound:true, op, thr:thr(a.key)||thr(b.key)};
+}
+/* ぼかし：真なら P⇒W となる W、偽なら S⇒P となる S の否定（対偶） */
+function weakOptions(q, n){
+  const out=[];
+  // 大小の条件は、質問自体が大小の条件のときだけ使う（「50以上ならば偶数」のような偶然の包含を避ける）
+  const lib = LIB.filter(p=> q.thr || !/^(ge|le)/.test(p.key));
+  if(q.set[n]){
+    for(const w of lib){ const c=cnt(w.set); if(c<=N*.8 && strictSub(q.set,w.set)) out.push({fam:w.key.replace(/[0-9_]+$/,''), key:w.key, neg:false, text:w.label, set:w.set, info:c, why:`「${q.label}」ならば「${w.label}」`}); }
+    out.sort((a,b)=>b.info-a.info);
+  } else {
+    for(const s of lib){ const c=cnt(s.set); if(c>=2 && strictSub(s.set,q.set)) out.push({fam:s.key.replace(/[0-9_]+$/,''), key:s.key, neg:true, text:s.neg, set:NOT(s.set), info:N-c, why:`「${s.label}」ならば「${q.label}」。その対偶で「${q.neg}」ならば「${s.neg}」`}); }
+    out.sort((a,b)=>b.info-a.info);
+  }
+  // 種類ごとに1つ（情報が一番少ないもの）だけ残し、上位3つを出す
+  const seen=new Set(), res=[];
+  for(const o of out){ if(seen.has(o.fam)) continue; seen.add(o.fam); res.push(o); if(res.length>=3) break; }
+  return res;
+}
+
+/* ============ 状態 ============ */
+let cfg = {N:50, diff:'normal', mySecret:'', lies:true};
+let showBoard = false;   // 候補の盤面（タップで表示／非表示）
+let S = null;
+let view = 'opp';       // 盤面タブ：opp=相手の数 / me=相手から見た自分の数
+let hidden = false;
+const other = p => p==='h'?'c':'h';
+const NAME = {h:'あなた', c:'CPU'};
+
+function newGame(){
+  N = cfg.N; buildLib();
+  const m = MODES[N];
+  const mine = parseInt(cfg.mySecret,10);
+  S = {
+    N, diff:cfg.diff,
+    sec:{h: (mine>=1 && mine<=N) ? mine : rint(1,N), c: rint(1,N)},
+    hand:{h:[], c:[]},
+    lies:{h:cfg.lies?m.lies:0, c:cfg.lies?m.lies:0}, weak:{h:m.weak, c:m.weak}, liesOn:cfg.lies, cut:null, hint:{h:null, c:null},
+    recs:[], turn:'h', skip:{h:0,c:0}, extra:false,
+    phase:'act', sel:[], op:'and', pending:null, winner:null, toast:'', asks:{h:0,c:0}
+  };
+  view='opp'; hidden=false; showBoard=false;
+  refreshHand('h'); refreshHand('c');
+  render(); window.scrollTo(0,0);
+}
+
+/* X の数についての「公開された手がかり」から残る候補 */
+function cand(X){
+  let s = ALL();
+  for(const r of S.recs){
+    if(r.kind==='qa' && r.ans===X){
+      let c;
+      if(r.type==='weak') c = r.weak.set;
+      else { const said = r.status==='revealed' ? r.truth : r.said; c = said ? r.q.set : NOT(r.q.set); }
+      s = AND(s,c);
+    } else if(r.kind==='guess' && r.target===X && !r.ok){
+      s = AND(s, mk(n=>n!==r.g));
+    }
+  }
+  return s;
+}
+function candIf(X, idx){   // idx の答えが嘘だった場合の候補
+  const r=S.recs[idx]; const saved=r.status; r.status='revealed';
+  const s=cand(X); r.status=saved; return s;
+}
+
+/* ============ カットイン ============ */
+let cutTimer=null;
+function showCut(c, then){
+  S.cut=Object.assign({}, c, {then}); render();
+  clearTimeout(cutTimer); cutTimer=setTimeout(closeCut, c.ms||2600);
+}
+function closeCut(){
+  clearTimeout(cutTimer);
+  if(!S || !S.cut) return;
+  const t=S.cut.then; S.cut=null;
+  if(t) t(); else render();
+}
+function cutForQA(r){
+  const who = r.ans==='h' ? 'あなたの答え' : 'CPUの答え';
+  if(r.type==='weak') return {who, big:'ぼかし', cls:'weak', line:`n は ${r.weak.text}`};
+  return r.said ? {who, big:'はい', cls:'yes', line:`n は ${r.q.label}`} : {who, big:'いいえ', cls:'no', line:`n は ${r.q.neg}`};
+}
+
+/* 候補が全体の2割を下回ると、X が「まだ見破られていない嘘」をついているかが公開される */
+/* 公開は一度きり。2割を切った瞬間の状態を記録し、その後は更新しない（後からついた嘘はばれない） */
+function updateHints(){
+  if(!S.liesOn) return;
+  for(const X of ['h','c']){
+    if(S.hint[X]===null && cnt(cand(X)) < N*0.2){
+      S.hint[X] = {lie: S.recs.some(r=>r.kind==='qa' && r.ans===X && r.lie && r.status!=='revealed'), at: S.recs.length, seen:false};
+    }
+  }
+}
+function lieHint(X){ return S.hint[X] ? S.hint[X].lie : null; }
+/* 公開後に X の嘘を見破ったか（CPUがダウトをやめる目安） */
+const hintResolved = X => S.hint[X] && S.recs.some((r,i)=>r.kind==='doubt' && r.ok && S.recs[r.idx].ans===X && i>=S.hint[X].at);
+
+/* ============ 進行 ============ */
+function log(rec){ S.recs.push(rec); }
+function endTurn(who){
+  if(S.winner) return;
+  if(S.extra){ S.extra=false; startTurn(who); } else startTurn(other(who));
+}
+function startTurn(p){
+  if(S.winner) return;
+  if(S.skip[p]>0){ S.skip[p]--; log({kind:'skip', who:p}); return startTurn(other(p)); }
+  S.turn=p; S.sel=[]; S.pending=null;
+  updateHints();
+  refreshHand(p);
+  if(p==='h'){
+    S.phase='act';
+    const hint=lieHint('c');
+    if(hint!==null && !S.hint.c.seen){
+      S.hint.c.seen=true;
+      return showCut({who:'候補が2割を切った', big:hint?'嘘あり':'嘘なし', cls:hint?'no':'yes',
+        line:(hint?'CPUは、まだ見破られていない嘘をついている':'CPUの答えは、ここまで全部本当')+'（この表示はもう更新されない）', ms:3400}, ()=>render());
+    }
+    render();
+  }
+  else { S.phase='cpu'; render(); setTimeout(cpuAct, 900); }
+}
+function useCards(p, idxs){
+  idxs.sort((a,b)=>b-a).forEach(i=>S.hand[p].splice(i,1));
+  refreshHand(p);
+}
+function makeQA(asker, q, type, extra){
+  const ans=other(asker), n=S.sec[ans], truth=!!q.set[n];
+  const r={kind:'qa', asker, ans, q, truth, type, status:''};
+  if(type==='honest'){ r.said=truth; }
+  else if(type==='lie'){ r.said=!truth; r.lie=true; S.lies[ans]--; }
+  else { r.weak=extra; S.weak[ans]--; }
+  S.asks[asker]++;
+  return r;
+}
+function doGuess(who, g){
+  const target=other(who), ok = g===S.sec[target];
+  log({kind:'guess', who, target, g, ok});
+  const head = who==='h' ? 'あなたの宣言' : 'CPUの宣言';
+  if(ok){ showCut({who:head, big:'正解', cls:'yes', line:`秘密の数は ${g}`}, ()=>{ S.winner=who; S.phase='over'; render(); window.scrollTo(0,0); }); return; }
+  S.skip[who]=1;
+  S.toast = who==='h' ? `はずれ！ ${g} ではありません。次の手番は休みです` : `CPUの宣言「${g}」ははずれ。CPUは次の手番が休みです`;
+  showCut({who:head, big:'はずれ', cls:'no', line:`「${g}」ではない ・ 1回休み`}, ()=>endTurn(who));
+}
+function doDoubt(who, idx){
+  const r=S.recs[idx];
+  if(r.lie){
+    r.status='revealed';
+    log({kind:'doubt', who, idx, ok:true});
+    S.extra=true;
+    S.toast = who==='h' ? 'ダウト成功！ 嘘を見破った。もう一度行動できます' : 'CPUにダウトされた！ 嘘がばれました。CPUがもう一度行動します';
+    const real = r.truth ? `本当は「n は ${r.q.label}」` : `本当は「n は ${r.q.neg}」`;
+    return showCut({who:NAME[who]+'のダウト', big:'見破った', cls:'yes', line:real}, ()=>endTurn(who));
+  } else {
+    r.status='confirmed';
+    log({kind:'doubt', who, idx, ok:false});
+    S.skip[who]=1;
+    S.toast = who==='h' ? 'ダウト失敗…その答えは本当でした。次の手番は休みです' : 'CPUのダウトは失敗。CPUは次の手番が休みです';
+    return showCut({who:NAME[who]+'のダウト', big:'本当', cls:'info', line:'その答えは本当だった ・ 1回休み'}, ()=>endTurn(who));
+  }
+}
+
+/* ============ CPU ============ */
+function cpuAnswer(q){
+  const n=S.sec.c, truth=!!q.set[n];
+  const cur=cand('c'), cc=cnt(cur);
+  const after=cnt(AND(cur, truth?q.set:NOT(q.set)));
+  const ratio = cc ? after/cc : 1;
+  const lieAfter=cnt(AND(cur, truth?NOT(q.set):q.set));
+  const pLie = {easy:.2, normal:.4, hard:.55}[S.diff];
+  const pWeak = {easy:.3, normal:.5, hard:.6}[S.diff];
+  if(S.weak.c>0 && ratio<.55 && Math.random()<pWeak){
+    const ops=weakOptions(q,n);
+    if(ops.length) return makeQA('h', q, 'weak', ops[0]);
+  }
+  if(S.lies.c>0 && lieAfter>=1 && (ratio<.4 || after<=3) && lieAfter>after && Math.random()<pLie*(after<=3?1.5:1)){
+    return makeQA('h', q, 'lie');
+  }
+  return makeQA('h', q, 'honest');
+}
+function bestQuestion(cs){
+  const hand=S.hand.c, total=cnt(cs);
+  const opts=[];
+  hand.forEach((a,i)=>{ opts.push({idx:[i], q:compound(a)}); });
+  if(S.diff!=='easy'){
+    for(let i=0;i<hand.length;i++) for(let j=i+1;j<hand.length;j++){
+      opts.push({idx:[i,j], q:compound(hand[i],hand[j],'and')});
+      opts.push({idx:[i,j], q:compound(hand[i],hand[j],'or')});
+    }
+  }
+  opts.forEach(o=>{ const y=cnt(AND(cs,o.q.set)); o.score = Math.abs(total-2*y) + (o.idx.length-1)*total*.08 + (y===0||y===total ? total*3 : 0); });
+  if(S.diff==='easy') return pick(opts.filter(o=>o.score<total*3).concat(opts).slice(0, Math.max(1,opts.length)));
+  opts.sort((a,b)=>a.score-b.score);
+  if(S.diff==='normal' && Math.random()<.3) return pick(opts.slice(0,Math.min(4,opts.length)));
+  return opts[0];
+}
+async function cpuAct(){
+  if(S.winner || S.turn!=='c') return;
+  const cs=cand('h'), c=cnt(cs);
+  if(c===0){
+    // 矛盾 → どれかが嘘。ひっくり返すと一番候補が残る答えにダウト
+    let best=-1, bestN=-1;
+    S.recs.forEach((r,i)=>{ if(r.kind==='qa' && r.ans==='h' && r.type!=='weak' && !r.status){ const k=cnt(candIf('h',i)); if(k>=bestN){ bestN=k; best=i; } } });
+    if(best>=0){ doDoubt('c', best); return; }
+  }
+  // 候補が2割を切ると、あなたに隠れた嘘があるかが分かる
+  const hint=lieHint('h');
+  if(hint===true && !hintResolved('h') && c>0 && Math.random() < ({easy:.5, normal:.8, hard:1})[S.diff]){
+    let best=-1, bestN=-1;
+    S.recs.forEach((r,i)=>{ if(r.kind==='qa' && r.ans==='h' && r.type!=='weak' && !r.status){ const k=cnt(candIf('h',i)); if(k>bestN || (k===bestN && Math.random()<.5)){ bestN=k; best=i; } } });
+    if(best>=0){ doDoubt('c', best); return; }
+  }
+  const guessAt = {easy:1, normal:2, hard:2}[S.diff];
+  if(c>=1 && c<=guessAt && (c===1 || Math.random()<.6)){
+    const list=[]; for(let n=1;n<=N;n++) if(cs[n]) list.push(n);
+    doGuess('c', pick(list)); return;
+  }
+  const o = bestQuestion(c?cs:ALL());
+  useCards('c', o.idx.slice());
+  S.pending = o.q; S.phase='answer';
+  render();
+}
+
+/* ============ 人間の操作 ============ */
+function humanAsk(){
+  const h=S.hand.h, a=h[S.sel[0]], b=S.sel[1]!=null ? h[S.sel[1]] : null;
+  const q=compound(a,b,S.op);
+  useCards('h', S.sel.slice());
+  const r=cpuAnswer(q); log(r);
+  S.toast=''; S.sel=[]; S.phase='wait';
+  showCut(Object.assign(cutForQA(r), {q:`n は ${q.label}？`}), ()=>endTurn('h'));
+}
+function humanAnswer(type, extra){
+  const q=S.pending, r=makeQA('c', q, type, extra); log(r);
+  S.pending=null; S.toast=''; S.phase='wait';
+  showCut(Object.assign(cutForQA(r), {q:`n は ${q.label}？`, ms:1600}), ()=>endTurn('c'));
+}
+
+/* ============ 表示 ============ */
+function render(){
+  if(!S) return renderStart();
+  if(S.phase==='over') return renderOver();
+  renderGame();
+}
+function renderStart(){
+  const segN=[30,50,100,1000].map(n=>`<button aria-pressed="${cfg.N===n}" data-n="${n}">1〜${n}</button>`).join('');
+  const segD=[['easy','やさしい'],['normal','ふつう'],['hard','つよい']].map(([k,l])=>`<button aria-pressed="${cfg.diff===k}" data-d="${k}">${l}</button>`).join('');
+  const m=MODES[cfg.N];
+  const segL=[[true,'嘘あり'],[false,'嘘なし']].map(([k,l])=>`<button aria-pressed="${cfg.lies===k}" data-l="${k}">${l}</button>`).join('');
+  app.innerHTML=`
+<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs 1 ・ CPU戦</span></header>
+  <section class="panel">
+    <span class="cap">ルール</span>
+    <ul class="rules">
+      <li>おたがいに秘密の数を持ち、命題カードで質問して相手の数を当てる。先に当てたほうの勝ち。</li>
+      <li>手札のカード1枚で質問するか、2枚を「かつ」「または」でつないで質問する。</li>
+      <li>答える側は「はい／いいえ」で正直に答えるほかに、${cfg.lies?`<b>嘘</b>（${m.lies}回まで）と`:''}<b>ぼかし</b>（${m.weak}回まで）が使える。</li>
+      <li>ぼかしは、本当だけど弱い答え。「6の倍数？」に「偶数です」と返すような答え方。</li>
+      ${cfg.lies?'<li>相手の数の候補が全体の2割を下回ると、相手が<b>まだ見破られていない嘘</b>をついているかどうかが<b>一度だけ</b>公開される。公開後についた嘘は表示に反映されない（相手にも同じ条件でこちらの情報が公開される）。</li>':''}
+      ${cfg.lies?'<li>自分の番に、相手の「はい／いいえ」の答えを1つ選んで<b>ダウト</b>できる。当たればもう一度行動、外れたら1回休み。</li>':'<li><b>嘘なしモード</b>：嘘とダウトはなし。答えはすべて本当なので、論理だけで絞り込む。</li>'}
+      <li>数の宣言を外すと1回休み。</li>
+    </ul>
+  </section>
+</div><div class="col"><section class="panel">
+    <span class="cap">数の範囲</span><div class="seg" id="segN">${segN}</div>
+    <span class="cap">嘘</span><div class="seg" id="segL">${segL}</div>
+    <span class="cap">CPUの強さ</span><div class="seg" id="segD">${segD}</div>
+    <span class="cap">あなたの秘密の数</span>
+    <div class="guess"><input type="number" id="mySec" min="1" max="${cfg.N}" placeholder="おまかせ" value="${esc(cfg.mySecret)}"><span class="dim" style="font-size:.85rem">空欄なら自動で決まります</span></div>
+  </section>
+  <button class="btn wide" id="startBtn">ゲーム開始</button>
+  <button class="ghost" id="menuBtn">メニューにもどる</button></div></div>`;
+  document.getElementById('menuBtn').onclick=()=>goMenu();
+  document.querySelectorAll('#segN button').forEach(b=>b.onclick=()=>{ cfg.N=+b.dataset.n; renderStart(); });
+  document.querySelectorAll('#segD button').forEach(b=>b.onclick=()=>{ cfg.diff=b.dataset.d; renderStart(); });
+  document.querySelectorAll('#segL button').forEach(b=>b.onclick=()=>{ cfg.lies=b.dataset.l==='true'; renderStart(); });
+  const ms=document.getElementById('mySec'); ms.oninput=()=>{ cfg.mySecret=ms.value; };
+  document.getElementById('startBtn').onclick=newGame;
+}
+
+function gridHtml(s){
+  const tiny = N>100;
+  const cols = N<=30 ? 6 : N<=100 ? 10 : 40;
+  let h=`<div class="grid${tiny?' tiny':''}" style="grid-template-columns:repeat(${cols},1fr)" role="img" aria-label="残っている候補">`;
+  for(let n=1;n<=N;n++) h+=`<div class="cell${s[n]?'':' out'}">${tiny?'':n}</div>`;
+  return h+'</div>';
+}
+function listHtml(s){
+  const l=[]; for(let n=1;n<=N;n++) if(s[n]) l.push(n);
+  return l.length<=40 ? `<p class="num dim" style="font-size:.85rem;word-break:break-all">${l.join(', ')}</p>` : '';
+}
+function qaText(r){
+  const by = r.asker==='h' ? 'あなた' : 'CPU';
+  const to = r.ans==='h' ? 'あなた' : 'CPU';
+  let a, why='', tags='';
+  if(r.type==='weak'){ a=`「n は ${r.weak.text}」`; tags+='<span class="tag weak">ぼかし</span>'; why=r.weak.why; }
+  else {
+    a = r.said ? `はい（n は ${r.q.label}）` : `いいえ（n は ${r.q.neg}）`;
+    if(r.status==='revealed') tags+='<span class="tag lie">嘘だった</span>';
+    if(r.status==='confirmed') tags+='<span class="tag true">本当</span>';
+    if(S.phase==='over' && r.lie && r.status!=='revealed') tags+='<span class="tag lie">嘘</span>';
+    if(r.ans==='h' && r.lie && S.phase!=='over' && r.status!=='revealed') tags+='<span class="tag lie">あなたの嘘</span>';
+  }
+  return {by, to, q:`n は ${r.q.label}？`, a, why, tags};
+}
+function logHtml(){
+  const items=[];
+  S.recs.forEach((r,i)=>{
+    if(r.kind==='qa'){
+      const t=qaText(r);
+      const canDoubt = S.phase==='doubt' && r.ans==='c' && r.type!=='weak' && !r.status;
+      items.push(`<li class="${r.asker==='h'?'me':''}"><span class="at">${t.by} → ${t.to}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}${t.tags}</span>${t.why?`<span class="why">${esc(t.why)}</span>`:''}${canDoubt?`<button class="doubt-btn" data-i="${i}">これは嘘だ！</button>`:''}</li>`);
+    } else if(r.kind==='guess'){
+      items.push(`<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}の宣言</span><span class="qt">「${r.g}」${r.ok?'正解！':'はずれ'}</span></li>`);
+    } else if(r.kind==='doubt'){
+      items.push(`<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}のダウト</span><span class="qt">${r.ok?'成功：嘘を見破った':'失敗：本当の答えだった'}</span></li>`);
+    } else if(r.kind==='skip'){
+      items.push(`<li><span class="at">${NAME[r.who]}は休み</span></li>`);
+    }
+  });
+  return items.reverse().join('') || '<li class="dim">まだ質問はありません</li>';
+}
+
+function hintBadge(X){
+  const h=lieHint(X);
+  if(h===null) return '';
+  const subj = X==='c' ? 'CPU' : 'あなた';
+  return `<span class="hint ${h?'on':''}">2割時点：${subj}に隠れた嘘${h?'あり':'なし'}${hintResolved(X)?'（見破り済み）':''}</span>`;
+}
+function renderGame(){
+  const oppC=cand('c'), meC=cand('h'), oc=cnt(oppC), mc=cnt(meC);
+  const showS = view==='opp' ? oppC : meC;
+  const sc = view==='opp' ? oc : mc;
+  const turnTxt = S.phase==='answer' ? 'CPUからの質問' : S.turn==='h' ? 'あなたの番' : 'CPUの番';
+  app.innerHTML=`
+<div class="cols"><div class="col"><div class="turn" aria-live="polite">${turnTxt}</div>
+  <section class="status">
+    <div class="who ${S.turn==='h'?'on':''}">
+      <span class="name">あなた</span>
+      <button class="ghost" id="hideBtn" style="min-height:0;padding:0;border:none;text-align:left" aria-label="秘密の数の表示を切り替え"><span class="secret">${hidden?'••':S.sec.h}</span></button>
+      <span class="meta">${S.liesOn?`嘘 残${S.lies.h} ・ `:''}ぼかし 残${S.weak.h}</span>
+      ${hintBadge('h')}
+    </div>
+    <div class="who ${S.turn==='c'?'on':''}">
+      <span class="name">CPU（${({easy:'やさしい',normal:'ふつう',hard:'つよい'})[S.diff]}）</span>
+      <span class="secret">？</span>
+      <span class="meta">${S.liesOn?'嘘の残りは秘密':'嘘なし'} ・ ぼかし 残${S.weak.c}</span>
+      ${hintBadge('c')}
+    </div>
+  </section>
+  ${S.toast?`<div class="toast pop" role="status">${esc(S.toast)}</div>`:''}
+  ${actionHtml()}
+</div><div class="col"><section class="panel">
+    <div class="tabs">
+      <button aria-pressed="${view==='opp'}" data-v="opp">CPUの数の候補</button>
+      <button aria-pressed="${view==='me'}" data-v="me">CPUから見たあなた</button>
+    </div>
+    <div class="boardhead"><span class="dim" style="font-size:.85rem">${view==='opp'?'これまでのCPUの答えと矛盾しない数':'あなたの答えからCPUが絞れている範囲'}</span><button class="peek" id="peekBtn" aria-expanded="${showBoard}">${showBoard?'隠す':'見る'}</button></div>
+    ${showBoard ? `<div class="row"><span></span><span class="count">${sc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+    ${view==='opp' && oc===0 ? '<p class="warn">候補が0個！ どこかでCPUが嘘をついています。ダウトのチャンス</p>':''}
+    ${gridHtml(showS)}
+    ${view==='opp'?listHtml(showS):''}` : `<button class="veil" id="veilBtn">候補は隠れています。自分で考えてから、タップで確認</button>`}
+  </section>
+  <section class="panel grow">
+    <span class="cap">記録</span>
+    <ul class="log">${logHtml()}</ul>
+  </section>
+  <button class="ghost" id="quitBtn">設定にもどる</button></div></div>
+  ${S.cut?`<button class="cutin" id="cutin" aria-live="assertive">
+    <div class="band">
+      <span class="who2">${esc(S.cut.who)}</span>
+      ${S.cut.q?`<span class="dim">${esc(S.cut.q)}</span>`:''}
+      <span class="big ${S.cut.cls}">${esc(S.cut.big)}</span>
+      <span class="line">${esc(S.cut.line)}</span>
+      <span class="hint">タップで次へ</span>
+    </div></button>`:''}`;
+  bindGame();
+}
+function actionHtml(){
+  if(S.phase==='cpu') return `<section class="panel"><p class="dim">CPUが考えています…</p></section>`;
+  if(S.phase==='wait') return `<section class="panel"><p class="dim">…</p></section>`;
+  if(S.phase==='answer') return answerHtml();
+  if(S.phase==='doubt') return `<section class="panel"><p>下の記録から、嘘だと思うCPUの「はい／いいえ」を選んでください。</p><button class="ghost" id="cancelDoubt">やめる</button></section>`;
+  // act
+  const sel=S.sel, h=S.hand.h;
+  let preview='';
+  if(sel.length){
+    const q=compound(h[sel[0]], sel[1]!=null?h[sel[1]]:null, S.op);
+    const oc=cand('c'), y=cnt(AND(oc,q.set)), t=cnt(oc);
+    preview=`<div class="qpreview">n は ${esc(q.label)}？${showBoard?`<small>今の候補${t}個のうち、「はい」なら${y}個、「いいえ」なら${t-y}個が残る</small>`:''}</div>`;
+  }
+  const canDoubt = S.recs.some(r=>r.kind==='qa' && r.ans==='c' && r.type!=='weak' && !r.status);
+  return `<section class="panel">
+    <span class="cap">手札（1枚、または2枚を「かつ／または」でつなぐ）</span>
+    <div class="hand">${h.map((c,i)=>`<button class="pcard" aria-pressed="${sel.includes(i)}" data-c="${i}">${esc(c.label)}</button>`).join('')}</div>
+    ${sel.length===2?`<div class="ops"><button aria-pressed="${S.op==='and'}" data-op="and">かつ</button><button aria-pressed="${S.op==='or'}" data-op="or">または</button></div>`:''}
+    ${preview}
+    <button class="btn wide" id="askBtn" ${sel.length?'':'disabled'}>この命題で質問する</button>
+    <div class="actions">
+      <div class="guess"><input type="number" id="guessIn" min="1" max="${N}" placeholder="数"><button class="ghost" id="guessBtn">宣言する</button></div>
+      ${S.liesOn?`<button class="ghost" id="doubtBtn" ${canDoubt?'':'disabled'}>ダウトする</button>`:''}
+    </div>
+  </section>`;
+}
+function bindGame(){
+  const $=id=>document.getElementById(id);
+  $('hideBtn').onclick=()=>{ hidden=!hidden; render(); };
+  $('quitBtn').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
+  document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ view=b.dataset.v; render(); });
+  const tog=()=>{ showBoard=!showBoard; render(); };
+  if($('peekBtn')) $('peekBtn').onclick=tog;
+  if($('veilBtn')) $('veilBtn').onclick=tog;
+  if($('cutin')) $('cutin').onclick=closeCut;
+  if(S.phase==='act'){
+    document.querySelectorAll('.pcard').forEach(b=>b.onclick=()=>{
+      const i=+b.dataset.c, k=S.sel.indexOf(i);
+      if(k>=0) S.sel.splice(k,1); else { if(S.sel.length>=2) S.sel.shift(); S.sel.push(i); }
+      render();
+    });
+    document.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ S.op=b.dataset.op; render(); });
+    $('askBtn').onclick=humanAsk;
+    $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } S.toast=''; doGuess('h',g); };
+    if($('doubtBtn')) $('doubtBtn').onclick=()=>{ S.phase='doubt'; S.toast=''; render(); };
+  }
+  if(S.phase==='doubt'){
+    $('cancelDoubt').onclick=()=>{ S.phase='act'; render(); };
+    document.querySelectorAll('.doubt-btn').forEach(b=>b.onclick=()=>doDoubt('h', +b.dataset.i));
+  }
+  if(S.phase==='answer'){
+    const shown = [...document.querySelectorAll('[data-w]')];
+    $('ansHonest').onclick=()=>humanAnswer('honest');
+    if($('ansLie')) $('ansLie').onclick=()=>{ if(S.lies.h>0) humanAnswer('lie'); };
+    shown.forEach(b=>b.onclick=()=>humanAnswer('weak', S._opsShown[+b.dataset.w]));
+  }
+}
+// ぼかしの選択肢は質問ごとに一度だけ作り、表示とボタンで同じものを使う
+function answerHtml(){
+  const q=S.pending, n=S.sec.h;
+  if(!S._opsShown || S._opsFor!==q){ S._opsShown = S.weak.h>0 ? weakOptions(q,n) : []; S._opsFor=q; }
+  const truth=!!q.set[n], ops=S._opsShown;
+  const honest = truth ? `はい（n は ${q.label}）` : `いいえ（n は ${q.neg}）`;
+  const lie = truth ? `いいえ（n は ${q.neg}）` : `はい（n は ${q.label}）`;
+  return `<section class="ask pop">
+    <span class="cap" style="color:var(--ink-dim)">CPUの質問</span>
+    <span class="q">n は ${esc(q.label)}？</span>
+    <span class="truth">あなたの数 ${n} は、この命題を<b>${truth?'満たします（真）':'満たしません（偽）'}</b></span>
+    <div class="ans">
+      <button id="ansHonest">正直に：${esc(honest)}<small>本当の答え</small></button>
+      ${S.liesOn?`<button class="lie" id="ansLie" ${S.lies.h>0?'':'disabled'}>嘘をつく：${esc(lie)}<small>残り${S.lies.h}回。ダウトされると見破られる</small></button>`:''}
+      ${S.weak.h>0 ? (ops.length ? `<span class="cap">ぼかす（残り${S.weak.h}回・本当だけど弱い答え）</span>`+ops.map((o,i)=>`<button data-w="${i}">n は ${esc(o.text)}<small>${esc(o.why)}</small></button>`).join('') : `<span class="truth">この質問にはぼかせる答えがありません</span>`) : ''}
+    </div>
+  </section>`;
+}
+
+function renderOver(){
+  const win=S.winner==='h';
+  const lies=S.recs.filter(r=>r.kind==='qa' && r.lie);
+  app.innerHTML=`
+<div class="cols"><div class="col"><header class="title result"><h2>${win?'あなたの勝ち！':'CPUの勝ち'}</h2></header>
+  <section class="status">
+    <div class="who"><span class="name">あなたの数</span><span class="secret">${S.sec.h}</span><span class="meta">質問 ${S.asks.h}回</span></div>
+    <div class="who"><span class="name">CPUの数</span><span class="secret">${S.sec.c}</span><span class="meta">質問 ${S.asks.c}回</span></div>
+  </section>
+  <section class="panel">
+    <span class="cap">ついた嘘</span>
+    ${lies.length ? `<ul class="log">${lies.map(r=>{ const t=qaText(r); return `<li class="${r.ans==='h'?'me':''}"><span class="at">${r.ans==='h'?'あなた':'CPU'}の嘘${r.status==='revealed'?'（見破られた）':'（ばれなかった）'}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}</span></li>`; }).join('')}</ul>` : '<p class="dim">どちらも嘘をつきませんでした</p>'}
+  </section>
+  <div class="actions">
+    <button class="btn" id="againBtn">同じ設定でもう一度</button>
+    <button class="ghost" id="setBtn">設定にもどる</button>
+  </div></div><div class="col"><section class="panel grow">
+    <span class="cap">すべての記録</span>
+    <ul class="log">${logHtml()}</ul>
+  </section></div></div>`;
+  document.getElementById('againBtn').onclick=()=>{ cfg.mySecret=''; newGame(); };
+  document.getElementById('setBtn').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
+}
+
+
+/* ================================================================
+   オンライン：1 vs n（1 ≦ n ≦ 50）
+   ・ラウンド制（vote）：全員が質問に投票 → 一番多い質問にホストが答える
+   ・個人戦（solo）：各自のペースで質問、答えはホストの端末が自動で返す
+   ================================================================ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC3__kwx4TH-ezcCCUWcb_J7PWZ7pDUjDc",
+  authDomain: "asumath-games.firebaseapp.com",
+  databaseURL: "https://asumath-games-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "asumath-games",
+  storageBucket: "asumath-games.firebasestorage.app",
+  messagingSenderId: "254715782397",
+  appId: "1:254715782397:web:bda2fd2283b292db050a94"
+};
+const OROOT = 'games/bluff/rooms';
+const ROOM_TTL = 6*60*60*1000;
+const MAX_PLAYERS = 50;
+
+const ls = {
+  get(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+const toArr = v => Array.isArray(v) ? v : (v && typeof v==='object' ? Object.keys(v).sort((a,b)=>a-b).map(k=>v[k]) : []);
+
+/* ---------- カードの鍵 ⇔ カード ---------- */
+function keyToCard(k){
+  let m;
+  if(k==='odd') return P.odd();
+  if(k==='pr') return P.prime();
+  if(k==='sq') return P.sq();
+  if(k==='cu') return P.cube();
+  if((m=/^m(\d+)$/.exec(k))) return P.mult(+m[1]);
+  if((m=/^ge(\d+)$/.exec(k))) return P.ge(+m[1]);
+  if((m=/^le(\d+)$/.exec(k))) return P.le(+m[1]);
+  if((m=/^l(\d)$/.exec(k))) return P.last(+m[1]);
+  if((m=/^r(\d+)_(\d+)$/.exec(k))) return P.mod(+m[1], +m[2]);
+  return null;
+}
+const validSpec = s => s && typeof s.a==='string' && keyToCard(s.a) && (!s.b || (typeof s.b==='string' && keyToCard(s.b) && (s.op==='and'||s.op==='or')));
+function specQ(s){ return compound(keyToCard(s.a), s.b?keyToCard(s.b):null, s.op||'and'); }
+function specKey(s){ return s.b ? [s.a,s.b].sort().join('|')+':'+s.op : s.a; }
+function weakSet(w){ const c=keyToCard(w.wk); return w.wneg ? NOT(c.set) : c.set; }
+
+/* 公開された答えの一覧から、ホストの数の候補 */
+function candFrom(answers, wrongGuesses){
+  let s = ALL();
+  toArr(answers).forEach(a=>{
+    let c;
+    if(a.type==='weak') c = weakSet(a.weak);
+    else { const q=specQ(a.q); const said = a.status==='revealed' ? !a.said : a.said; c = said ? q.set : NOT(q.set); }
+    s = AND(s,c);
+  });
+  (wrongGuesses||[]).forEach(g=>{ s=AND(s, mk(n=>n!==g)); });
+  return s;
+}
+function ansLine(a){
+  if(a.type==='weak') return `n は ${a.weak.text}`;
+  const q=specQ(a.q); const said = a.status==='revealed' ? !a.said : a.said;
+  return said ? `n は ${q.label}` : `n は ${q.neg}`;
+}
+
+/* ---------- Firebase ---------- */
+let fdb=null, uid=null, foff=0, fbError='';
+const fnow = () => Date.now() + foff;
+function fbInit(){
+  if(!window.firebase){ fbError='オンライン機能を読み込めませんでした（通信が制限されている可能性があります）'; return; }
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fdb = firebase.database();
+    fdb.ref('.info/serverTimeOffset').on('value', s=>{ foff = s.val()||0; });
+    firebase.auth().onAuthStateChanged(u=>{ if(u){ uid=u.uid; fbError=''; if(O.scr==='home') oRender(); } });
+    firebase.auth().signInAnonymously().catch(e=>{ fbError='サーバーにログインできませんでした（'+(e.code||'error')+'）'; if(O.scr==='home') oRender(); });
+  }catch(e){ fbError='オンライン機能の初期化に失敗しました'; }
+}
+const rref = p => fdb.ref(`${OROOT}/${O.code}${p?'/'+p:''}`);
+const TS = () => firebase.database.ServerValue.TIMESTAMP;
+
+/* ---------- 状態 ---------- */
+const O = {
+  scr:'home', code:'', isHost:false, screenOnly:false,
+  players:{}, st:null, unsub:[], err:'',
+  nick: ls.get('bluff-nick'),
+  set:{mode:'vote', N:50, lies:true, R:8, voteSec:20, soloMin:8, secret:''},
+  // 挑戦者
+  hand:[], handFor:'', sel:[], op:'and', showBoard:false, myVoteKey:'', myGuessKey:'', toast:'',
+  log:[], seq:0, wait:false, lastEv:0, cut:null, cutT:null, lastScore:null, ansVeil:true,
+  // ホストだけ
+  H:{secret:null, closing:false, voteCount:0, voteRef:null, done:{}, stu:{}, reqRef:null}
+};
+const myScore = () => (O.st && O.st.scores && O.st.scores[uid]) || null;
+const playerList = () => Object.entries(O.players||{}).filter(([k,p])=>p && typeof p.name==='string')
+  .sort((a,b)=>(a[1].joinedAt||0)-(b[1].joinedAt||0));
+const nameOf = k => { const p=O.players[k]; return p && p.name ? p.name.slice(0,8) : '（退出）'; };
+
+/* ---------- 部屋 ---------- */
+async function createRoom(){
+  O.err='';
+  for(let t=0;t<12;t++){
+    const c=String(rint(1000,9999)), ref=fdb.ref(`${OROOT}/${c}/meta`);
+    let res;
+    try{
+      res = await ref.transaction(cur=>{ if(cur && cur.host!==uid && cur.createdAt > fnow()-ROOM_TTL) return; return {host:uid, createdAt:TS()}; });
+    }catch(e){ O.err='部屋を作れませんでした（'+(e.code||e.message)+'）'; oRender(); return; }
+    if(res.committed){
+      O.code=c;
+      await Promise.all(['players','state','secret','votes','guesses','req','res'].map(p=>rref(p).remove().catch(()=>{})));
+      ls.set('bluff-room', c);
+      return enterRoom(true);
+    }
+  }
+  O.err='空いている部屋コードが見つかりませんでした'; oRender();
+}
+async function joinRoom(c, asScreen){
+  O.err='';
+  if(!/^\d{4}$/.test(c)){ O.err='4桁の数字を入れてください'; oRender(); return; }
+  let m;
+  try{ m=(await fdb.ref(`${OROOT}/${c}/meta`).get()).val(); }catch(e){ O.err='接続できませんでした（'+(e.code||e.message)+'）'; oRender(); return; }
+  if(!m || m.createdAt < fnow()-ROOM_TTL){ O.err='その部屋は見つかりません'; oRender(); return; }
+  O.code=c; ls.set('bluff-room', c);
+  O.screenOnly=!!asScreen && m.host!==uid;
+  enterRoom(m.host===uid);
+}
+function enterRoom(host){
+  O.isHost=host; O.scr='lobby'; O.st=null; O.players={}; O.log=[]; O.lastEv=0; O.cut=null;
+  O.unsub.forEach(u=>u()); O.unsub=[];
+  const listen=(ref,fn)=>{ ref.on('value',fn,()=>{}); O.unsub.push(()=>ref.off('value',fn)); };
+  listen(rref('players'), s=>{ O.players=s.val()||{}; if(O.scr==='lobby') refreshLobby(); else if(O.isHost) patchHost(); });
+  listen(rref('state'), s=>onState(s.val()));
+  if(!host && !O.screenOnly){
+    announce();
+    const conn=fdb.ref('.info/connected'), fn=s=>{ if(s.val() && O.code) announce(); };
+    conn.on('value',fn); O.unsub.push(()=>conn.off('value',fn));
+    listen(rref('res/'+uid), s=>onMyRes(s.val()));
+  }
+  if(host) hostResume();
+  oRender();
+}
+function announce(){
+  const ref=rref('players/'+uid);
+  ref.set({name:O.nick||'なまえなし', joinedAt:TS()}).catch(()=>{});
+  ref.onDisconnect().remove();
+}
+function leaveRoom(){
+  if(fdb && O.code && uid && !O.isHost && !O.screenOnly){ const r=rref('players/'+uid); r.onDisconnect().cancel(); r.remove().catch(()=>{}); }
+  O.unsub.forEach(u=>u()); O.unsub=[];
+  hostStopWatch();
+  O.code=''; O.st=null; O.isHost=false; O.screenOnly=false; O.scr='home'; oRender(); window.scrollTo(0,0);
+}
+
+/* ---------- 状態の受信（全員） ---------- */
+function onState(s){
+  const prev=O.st; O.st=s;
+  if(s && s.N && N!==s.N){ N=s.N; buildLib(); O.hand=[]; }
+  if(!s || s.phase==='lobby'){ if(O.scr!=='lobby'){ O.scr='lobby'; oRender(); } else refreshLobby(); return; }
+  if(O.scr!=='game'){ O.scr='game'; O.hand=[]; }
+  if(O.isHost) hostSync();
+  // カットイン（出来事）
+  const ev=s.ev;
+  const changed = !prev || prev.phase!==s.phase || prev.round!==s.round || prev.gid!==s.gid;
+  if(prev && prev.gid!==s.gid){ O.myVoteKey=''; O.myGuessKey=''; O.log=[]; O.lastScore=null; }
+  if(changed){ O.sel=[]; O.ansVeil=true; }
+  const sc=myScore();
+  if(sc && O.lastScore && sc.last && (!O.lastScore.last || sc.last.r!==O.lastScore.last.r)){
+    O.toast = sc.last.ok ? `正解！ +${sc.last.pts}点` : `はずれ… ${sc.last.pts}点`;
+  }
+  O.lastScore=sc;
+  if(ev && ev.id && ev.id!==O.lastEv){
+    const first = O.lastEv===0 && prev===null;
+    O.lastEv=ev.id;
+    if(!first){ oCut(ev.cut); return; }
+  }
+  if(changed) { oRender(); if(s.phase!==prev?.phase) window.scrollTo(0,0); }
+  else patchLive();
+}
+function oCut(c){
+  if(!c){ oRender(); return; }
+  O.cut=c; oRender();
+  clearTimeout(O.cutT); O.cutT=setTimeout(()=>{ O.cut=null; oRender(); }, c.ms||2600);
+}
+
+/* ================= ホストの処理 ================= */
+function hostResume(){
+  rref('secret').get().then(s=>{ const v=s.val(); if(v){ O.H.secret=v; O.H.stu=v.stu||{}; } }).catch(()=>{});
+}
+function evOf(cut){ return {id:Date.now()+Math.random(), cut}; }
+function hostSet(next){ return rref('state').set(next).catch(e=>console.error(e)); }
+function hostPatch(p){ return rref('state').update(p).catch(e=>console.error(e)); }
+function saveSecret(){ return rref('secret').set(O.H.secret).catch(()=>{}); }
+
+async function hostStart(){
+  const S0=O.set; N=S0.N; buildLib();
+  const sec=parseInt(S0.secret,10);
+  const n = (sec>=1 && sec<=N) ? sec : rint(1,N);
+  const m=MODES[N];
+  O.H.secret={n, lies:[], liesLeft:S0.lies?m.lies:0, stu:{}};
+  O.H.stu={}; O.H.done={}; O.H.closing=false;
+  await saveSecret();
+  await Promise.all(['votes','guesses','req','res'].map(p=>rref(p).remove().catch(()=>{})));
+  const base={gid:Date.now(), mode:S0.mode, N, liesOn:S0.lies, weakLeft:m.weak, answers:[], scores:{}, hint:null,
+    nPlayers:playerList().length, ev:null};
+  if(S0.mode==='vote'){
+    await hostSet(Object.assign(base,{phase:'vote', round:0, R:S0.R, voteSec:S0.voteSec, endsAt:fnow()+S0.voteSec*1000, voted:0}));
+  } else {
+    await hostSet(Object.assign(base,{phase:'play', round:0, endsAt:fnow()+S0.soloMin*60000, board:{}}));
+  }
+}
+function hostSync(){
+  const s=O.st;
+  if(s.mode==='vote' && s.phase==='vote') watchVotes(`r${s.round}`);
+  else if(s.mode==='solo' && s.phase==='play') watchReq();
+  else hostStopWatch();
+}
+function hostStopWatch(){
+  if(O.H.voteRef){ O.H.voteRef.off('value', O.H.voteRef._fn); O.H.voteRef=null; }
+  if(O.H.reqRef){ O.H.reqRef.off('value', O.H.reqRef._fn); O.H.reqRef=null; }
+}
+function watchVotes(k){
+  if(O.H.voteRef && O.H.voteRef._k===k) return;
+  hostStopWatch();
+  const ref=rref('votes/'+k); ref._k=k;
+  const fn=s=>{ const v=s.val()||{}; O.H.voteCount=Object.keys(v).length; patchHost(); };
+  ref.on('value',fn,()=>{}); ref._fn=fn; O.H.voteRef=ref;
+}
+setInterval(()=>{
+  updTimer();
+  const s=O.st; if(!O.isHost || !s || O.H.closing) return;
+  if(s.mode==='vote' && (s.phase==='vote' || s.phase==='lastguess') && fnow()>=s.endsAt) closeVote();
+  // 全員が投票したら締め切る（宣言は投票の前に）
+  if(s.mode==='vote' && s.phase==='vote' && O.H.voteRef && O.H.voteRef._k===`r${s.round}` && O.H.voteCount>=playerList().length && playerList().length>0) closeVote();
+  if(s.mode==='solo' && s.phase==='play' && fnow()>=s.endsAt) soloFinish();
+}, 400);
+
+/* --- ラウンド制 --- */
+function voteScore(r){ return Math.max(20, 100-10*r); }
+async function closeVote(){
+  const s=O.st; if(O.H.closing) return; O.H.closing=true;
+  try{
+    const k=`r${s.round}`;
+    const [vs, gs] = await Promise.all([rref('votes/'+k).get(), rref('guesses/'+k).get()]);
+    const votes=vs.val()||{}, guesses=gs.val()||{};
+    // 宣言の採点
+    const scores=Object.assign({}, s.scores||{});
+    let nOk=0;
+    Object.entries(guesses).forEach(([u,g])=>{
+      const sc=scores[u]||{pts:0, cleared:false};
+      if(sc.cleared || typeof g!=='number') return;
+      const ok = g===O.H.secret.n, pts = ok ? voteScore(s.round) : -10;
+      if(ok) nOk++;
+      scores[u]={pts:(sc.pts||0)+pts, cleared:sc.cleared||ok, at: ok ? s.round : (sc.at??null), last:{r:s.round, ok, pts}};
+    });
+    const nP=Math.max(1, playerList().length);
+    const nClear=Object.values(scores).filter(x=>x.cleared).length;
+    const guessCut = nOk ? {who:'宣言の結果', big:`${nOk}人`, cls:'yes', line:`正解者が出た！（合計 ${nClear}人 / ${nP}人）`, ms:2400} : null;
+    if(s.phase==='lastguess' || nClear>=nP){ return hostFinal(scores); }
+    // 投票の集計
+    const tally={};
+    Object.values(votes).forEach(v=>{
+      if(v && v.kind==='doubt' && Number.isInteger(v.i)){ const key='d'+v.i; tally[key]=tally[key]||{n:0, v:{kind:'doubt', i:v.i}}; tally[key].n++; }
+      else if(v && v.kind==='q' && validSpec(v.s)){ const key=specKey(v.s); tally[key]=tally[key]||{n:0, v:{kind:'q', s:v.s}}; tally[key].n++; }
+    });
+    const answers=toArr(s.answers);
+    const okDoubt = i => answers[i] && answers[i].type!=='weak' && answers[i].status!=='revealed' && answers[i].status!=='confirmed';
+    const list=Object.values(tally).filter(x=>x.v.kind!=='doubt' || okDoubt(x.v.i)).sort((a,b)=>b.n-a.n);
+    const top=list.filter(x=>x.n===(list[0]?list[0].n:0));
+    const top3=list.slice(0,3).map(x=>({label: voteLabel(x.v), n:x.n}));
+    // 同票なら、ホストが選ぶ
+    if(top.length>1){
+      await hostPatch({phase:'tiepick', scores, ties:top.map(x=>({v:x.v, label:voteLabel(x.v), n:x.n})), tally:top3,
+        ev: evOf({who:'投票の結果', big:'同票', cls:'info', line:`${top.length}つの候補が ${top[0].n}票ずつ ・ ホストが選びます`, ms:2400})});
+      return;
+    }
+    const win = top.length ? pick(top).v : {kind:'q', s:{a:drawCard().key}};
+    await applyWin(s, win, scores, top3, guessCut);
+  } finally { setTimeout(()=>{ O.H.closing=false; }, 800); }
+}
+function voteLabel(v){ return v.kind==='doubt' ? `第${v.i+1}問にダウト` : specQ(v.s).label; }
+async function hostPickTie(i){
+  const s=O.st, t=toArr(s.ties)[i]; if(!t) return;
+  await applyWin(s, t.v, Object.assign({}, s.scores||{}), toArr(s.tally), null);
+}
+async function applyWin(s, win, scores, top3, guessCut){
+  const answers=toArr(s.answers);
+  {
+    if(win.kind==='doubt'){
+      const a=answers[win.i], lie=O.H.secret.lies.includes(win.i);
+      a.status = lie ? 'revealed' : 'confirmed';
+      const next={answers, scores, round:s.round+1, tally:top3, voted:0, ties:null};
+      const cut = lie ? {who:`挑戦者のダウト → 第${win.i+1}問`, big:'見破った', cls:'yes', line:`本当は「${ansLine(a)}」`, ms:3000}
+                      : {who:`挑戦者のダウト → 第${win.i+1}問`, big:'本当', cls:'info', line:'その答えは本当だった', ms:2600};
+      Object.assign(next, afterRound(s, answers, next.round));
+      next.ev=evOf(cut);
+      await hostPatch(next);
+    } else {
+      await hostPatch({phase:'answer', scores, current:{s:win.s}, tally:top3, ties:null, ev: guessCut?evOf(guessCut):s.ev||null});
+    }
+  }
+}
+function afterRound(s, answers, round){
+  const out={};
+  // 2割の公開（一度きり）
+  if(s.liesOn && !s.hint && cnt(candFrom(answers)) < N*0.2){
+    out.hint={lie: O.H.secret.lies.some(i=>answers[i] && answers[i].status!=='revealed'), at:answers.length};
+  }
+  if(round>=s.R){ out.phase='lastguess'; out.endsAt=fnow()+s.voteSec*1000; }
+  else { out.phase='vote'; out.endsAt=fnow()+s.voteSec*1000; }
+  out.current=null;
+  return out;
+}
+async function hostAnswer(type, weak){
+  const s=O.st, q=specQ(s.current.s), truth=!!q.set[O.H.secret.n];
+  const answers=toArr(s.answers);
+  const a={q:s.current.s, type, status:''};
+  if(type==='honest') a.said=truth;
+  else if(type==='lie'){ a.said=!truth; O.H.secret.lies.push(answers.length); O.H.secret.liesLeft--; await saveSecret(); }
+  else a.weak={wk:weak.key, wneg:weak.neg, text:weak.text, why:weak.why};
+  answers.push(a);
+  const next={answers, round:s.round+1, voted:0, weakLeft: s.weakLeft - (type==='weak'?1:0)};
+  Object.assign(next, afterRound(s, answers, next.round));
+  const cutA = type==='weak' ? {big:'ぼかし', cls:'weak'} : a.said ? {big:'はい', cls:'yes'} : {big:'いいえ', cls:'no'};
+  let cut = Object.assign({who:`ホストの答え（第${answers.length}問）`, q:`n は ${q.label}？`, line:ansLine(a), ms:3000}, cutA);
+  if(next.hint && !s.hint){
+    cut.line += ` ／ 候補が2割を切った：ホストに隠れた嘘${next.hint.lie?'あり':'なし'}`;
+    cut.ms=4200;
+  }
+  next.ev=evOf(cut);
+  await hostPatch(next);
+}
+async function hostFinal(scores){
+  const nP=Math.max(1, playerList().length);
+  const nClear=Object.values(scores).filter(x=>x.cleared).length;
+  const classWin = nClear*2 > nP;
+  await hostPatch({phase:'final', scores, secretN:O.H.secret.n, lieIdx:O.H.secret.lies, classWin, nClear, nPlayers:nP,
+    ev:evOf({who:'ゲーム終了', big: classWin?'挑戦者の勝ち':'ホストの勝ち', cls: classWin?'yes':'no', line:`秘密の数は ${O.H.secret.n} ・ 正解 ${nClear}人 / ${nP}人`, ms:4000})});
+}
+async function hostBack(){ await Promise.all(['votes','guesses','req','res'].map(p=>rref(p).remove().catch(()=>{}))); hostSet({phase:'lobby'}); }
+
+/* --- 個人戦：ホストの端末が各挑戦者の質問に自動で答える --- */
+function watchReq(){
+  if(O.H.reqRef) return;
+  hostStopWatch();
+  const ref=rref('req');
+  const fn=s=>{ const all=s.val()||{}; Object.entries(all).forEach(([u,reqs])=>{ Object.entries(reqs||{}).forEach(([k,r])=>handleReq(u,k,r)); }); };
+  ref.on('value',fn,()=>{}); ref._fn=fn; O.H.reqRef=ref;
+}
+function stuOf(u){
+  const m=MODES[N];
+  if(!O.H.stu[u]) O.H.stu[u]={log:[], lies:[], liesLeft:O.st.liesOn?m.lies:0, weakLeft:m.weak, asks:0, pen:0, cleared:false, pts:0, wrong:[], hint:null, done:{}};
+  if(!O.H.stu[u].done) O.H.stu[u].done={};
+  const x=O.H.stu[u]; x.log=toArr(x.log); x.lies=toArr(x.lies); x.wrong=toArr(x.wrong); return x;
+}
+async function handleReq(u, k, r){
+  const id=u+'/'+k;
+  if(O.H.done[id] || !O.st || O.st.phase!=='play') return;
+  O.H.done[id]=true;
+  if(!O.players[u] || !O.H.secret) return;
+  const x=stuOf(u);
+  if(x.done[k]) return;
+  x.done[k]=1;
+  let out=null;
+  if(x.cleared){ out={kind:'info', text:'すでに正解しています'}; }
+  else if(r && r.kind==='q' && validSpec(r.s)){
+    const q=specQ(r.s), n=O.H.secret.n, truth=!!q.set[n];
+    const cur=candFrom(x.log, x.wrong), cc=cnt(cur);
+    const after=cnt(AND(cur, truth?q.set:NOT(q.set))), lieAfter=cnt(AND(cur, truth?NOT(q.set):q.set));
+    const ratio=cc?after/cc:1;
+    let a={q:r.s, type:'honest', said:truth, status:''};
+    if(x.weakLeft>0 && ratio<.55 && Math.random()<.45){
+      const ops=weakOptions(q,n);
+      if(ops.length){ const w=ops[0]; a={q:r.s, type:'weak', weak:{wk:w.key, wneg:w.neg, text:w.text, why:w.why}, status:''}; x.weakLeft--; }
+    }
+    if(a.type==='honest' && x.liesLeft>0 && lieAfter>=1 && (ratio<.4||after<=3) && lieAfter>after && Math.random()<.45){
+      a.said=!truth; x.lies.push(x.log.length); x.liesLeft--;
+    }
+    x.log.push(a); x.asks++;
+    out={kind:'qa', i:x.log.length-1, a};
+    if(O.st.liesOn && !x.hint && cnt(candFrom(x.log, x.wrong)) < N*0.2){
+      x.hint={lie: x.lies.some(i=>x.log[i].status!=='revealed')};
+      out.hint=x.hint;
+    }
+  }
+  else if(r && r.kind==='guess' && Number.isInteger(r.g)){
+    const ok = r.g===O.H.secret.n;
+    if(ok){ x.cleared=true; x.pts=Math.max(10, 100-5*(x.asks+x.pen)); x.at=fnow(); }
+    else { x.pen+=3; x.wrong.push(r.g); }
+    out={kind:'guess', g:r.g, ok, pts:x.pts};
+  }
+  else if(r && r.kind==='doubt' && Number.isInteger(r.i) && x.log[r.i] && x.log[r.i].type!=='weak' && !x.log[r.i].status){
+    const lie=x.lies.includes(r.i);
+    x.log[r.i].status = lie ? 'revealed' : 'confirmed';
+    if(!lie) x.pen+=2;
+    out={kind:'doubt', i:r.i, ok:lie};
+  }
+  else out={kind:'info', text:'受け付けられませんでした'};
+  out.k=k;
+  O.H.secret.stu=O.H.stu;
+  await rref(`res/${u}/${k}`).set(out).catch(()=>{});
+  saveSecret();
+  // 掲示板（挑戦者ごとの場所だけ書き換える）
+  await hostPatch({[`board/${u}`]:{asks:x.asks, pen:x.pen, cleared:x.cleared, pts:x.pts}, [`scores/${u}`]:{pts:x.pts, cleared:x.cleared}});
+  if(x.cleared){
+    const nP=Math.max(1, playerList().length), nC=Object.values(O.H.stu).filter(b=>b.cleared).length;
+    if(nC>=nP) soloFinish();
+  }
+}
+async function soloFinish(){
+  if(O.H.closing) return; O.H.closing=true;
+  const s=O.st, nP=Math.max(1, playerList().length);
+  const nClear=Object.values(O.H.stu).filter(b=>b.cleared).length;
+  const classWin=nClear*2>nP;
+  await hostPatch({phase:'final', secretN:O.H.secret.n, classWin, nClear, nPlayers:nP,
+    ev:evOf({who:'ゲーム終了', big: classWin?'挑戦者の勝ち':'ホストの勝ち', cls: classWin?'yes':'no', line:`秘密の数は ${O.H.secret.n} ・ 正解 ${nClear}人 / ${nP}人`, ms:4000})});
+  setTimeout(()=>{ O.H.closing=false; }, 800);
+}
+
+/* ================= 挑戦者の操作 ================= */
+function myCand(){
+  const s=O.st; if(!s) return ALL();
+  if(s.mode==='vote') return candFrom(s.answers);
+  const log=O.log.filter(r=>r.kind==='qa').map(r=>r.a);
+  const wrong=O.log.filter(r=>r.kind==='guess' && !r.ok).map(r=>r.g);
+  return candFrom(log, wrong);
+}
+function oRefreshHand(){
+  let cs=myCand(); if(cnt(cs)===0) cs=ALL();
+  const keep=[];
+  for(const c of O.hand) if(c && !dup(c,keep) && splits(c,cs)) keep.push(c);
+  while(keep.length<HAND) keep.push(drawFor(keep, cs));
+  O.hand=keep;
+}
+function onMyRes(v){
+  const list=Object.values(v||{}).sort((a,b)=>(a.k>b.k?1:-1));
+  const before=O.log.length;
+  // 自分の記録を作り直す（ダウトで状態が変わるので）
+  const log=[];
+  list.forEach(r=>{
+    if(r.kind==='qa') log.push({kind:'qa', i:r.i, a:Object.assign({}, r.a)});
+    else if(r.kind==='doubt'){ const t=log.find(x=>x.kind==='qa' && x.i===r.i); if(t) t.a.status = r.ok?'revealed':'confirmed'; log.push(r); }
+    else log.push(r);
+    if(r.hint) O.myHint=r.hint;
+  });
+  O.log=log;
+  if(log.length>before && O.wait){
+    O.wait=false;
+    const r=list[list.length-1];
+    if(r.kind==='qa'){
+      const a=r.a, q=specQ(a.q);
+      const cA = a.type==='weak' ? {big:'ぼかし', cls:'weak'} : a.said ? {big:'はい', cls:'yes'} : {big:'いいえ', cls:'no'};
+      const c=Object.assign({who:'ホストの答え', q:`n は ${q.label}？`, line:ansLine(a), ms:2200}, cA);
+      if(r.hint){ c.line += ` ／ 候補が2割を切った：隠れた嘘${r.hint.lie?'あり':'なし'}`; c.ms=3800; }
+      O.hand=O.hand.filter((_,i)=>!(O.usedIdx||[]).includes(i)); O.sel=[]; oRefreshHand();
+      return oCut(c);
+    }
+    if(r.kind==='guess') return oCut(r.ok ? {who:'宣言', big:'正解', cls:'yes', line:`秘密の数は ${r.g} ・ ${r.pts}点`} : {who:'宣言', big:'はずれ', cls:'no', line:`「${r.g}」ではない ・ 質問3回ぶんのペナルティ`});
+    if(r.kind==='doubt'){ const t=log.find(x=>x.kind==='qa' && x.i===r.i); return oCut(r.ok ? {who:'ダウト', big:'見破った', cls:'yes', line:`本当は「${ansLine(t.a)}」`} : {who:'ダウト', big:'本当', cls:'info', line:'その答えは本当だった ・ 質問2回ぶんのペナルティ'}); }
+    if(r.kind==='info'){ O.toast=r.text; }
+  }
+  oRender();
+}
+function sendReq(body){
+  if(O.wait) return;
+  O.wait=true; O.toast='';
+  const k=String(Date.now()).padStart(15,'0')+'_'+(O.seq++);
+  rref(`req/${uid}/${k}`).set(body).catch(()=>{ O.wait=false; O.toast='送信できませんでした。もう一度'; oRender(); });
+  oRender();
+  setTimeout(()=>{ if(O.wait){ O.wait=false; O.toast='ホストの端末から返事がありません。ホストの画面が開いているか確認してください'; oRender(); } }, 12000);
+}
+function selSpec(){
+  const h=O.hand, a=h[O.sel[0]], b=O.sel[1]!=null?h[O.sel[1]]:null;
+  return b ? {a:a.key, b:b.key, op:O.op} : {a:a.key};
+}
+function voteQ(){
+  const s=O.st, spec=selSpec(), k=`r${s.round}`;
+  O.myVoteKey=k+':'+specKey(spec); O.myVoteLabel=specQ(spec).label;
+  rref(`votes/${k}/${uid}`).set({kind:'q', s:spec}).catch(()=>{});
+  oRender();
+}
+function voteDoubt(i){
+  const s=O.st, k=`r${s.round}`;
+  O.myVoteKey=k+':d'+i; O.myVoteLabel=`第${i+1}問にダウト`;
+  rref(`votes/${k}/${uid}`).set({kind:'doubt', i}).catch(()=>{});
+  oRender();
+}
+function guessVote(g){
+  const s=O.st, k=`r${s.round}`;
+  rref(`guesses/${k}/${uid}`).set(g).then(()=>{ O.myGuessKey=k; O.myGuessVal=g; oRender(); }).catch(()=>{ O.toast='この回はもう宣言しています'; oRender(); });
+}
+
+/* ================= 画面 ================= */
+function oRender(){
+  const keep={}, act=document.activeElement && document.activeElement.id;
+  ['guessIn','secIn','nickInput','codeInput'].forEach(id=>{ const e=document.getElementById(id); if(e) keep[id]=e.value; });
+  if(O.scr==='home') oHome(); else if(O.scr==='lobby') oLobby(); else oGame();
+  Object.entries(keep).forEach(([id,v])=>{ const e=document.getElementById(id); if(e && v!=='' && e.value==='') e.value=v; });
+  if(act){ const e=document.getElementById(act); if(e && e.tagName==='INPUT'){ try{ e.focus(); }catch(_){} } }
+}
+function oHome(){
+  const ok=!!(fdb && uid), last=ls.get('bluff-room');
+  app.innerHTML=`
+<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs n ・ オンライン</span></header>
+  <section class="panel">
+    <label class="cap" for="nickInput">プレイヤー名（8文字まで）</label>
+    <input type="text" class="txt" id="nickInput" maxlength="8" value="${esc(O.nick)}" placeholder="なまえ" autocomplete="nickname">
+  </section>
+</div><div class="col"><section class="panel">
+    <label class="cap" for="codeInput">ホストに言われた部屋コード（4桁）</label>
+    <div class="guess"><input type="text" class="txt code-in" id="codeInput" inputmode="numeric" maxlength="4" value="${esc(last)}" placeholder="0000" autocomplete="off"><button class="btn" id="joinBtn" ${ok?'':'disabled'}>参加</button></div>
+    <button class="ghost" id="screenBtn" ${ok?'':'disabled'}>スクリーン（プロジェクター）として見る</button>
+    <p class="warn" role="alert">${esc(O.err)}</p>
+  </section>
+  <section class="panel">
+    <span class="cap">ホスト用</span>
+    <button class="btn wide" id="createBtn" ${ok?'':'disabled'}>部屋を作る</button>
+  </section>
+  ${ok?'':`<p class="dim" style="text-align:center;font-size:.85rem">${esc(fbError||'サーバーに接続しています…')}</p>`}
+  <button class="ghost" id="backMenu">メニューにもどる</button></div></div>`;
+  const ni=document.getElementById('nickInput');
+  ni.oninput=()=>{ O.nick=ni.value.trim().slice(0,8); ls.set('bluff-nick', O.nick); };
+  const ci=document.getElementById('codeInput'); ci.oninput=()=>{ ci.value=ci.value.replace(/\D/g,'').slice(0,4); };
+  const need=()=>{ if(O.nick) return false; O.err='先にプレイヤー名を入れてください'; oRender(); return true; };
+  document.getElementById('joinBtn').onclick=()=>{ if(need()) return; joinRoom(ci.value,false); };
+  document.getElementById('screenBtn').onclick=()=>joinRoom(ci.value,true);
+  document.getElementById('createBtn').onclick=()=>{ if(!O.nick){ O.nick='ホスト'; } createRoom(); };
+  document.getElementById('backMenu').onclick=goMenu;
+}
+function lobbyListHtml(){
+  const l=playerList();
+  return l.length ? l.map(([k,p])=>`<li class="${k===uid?'me':''}">${esc(p.name.slice(0,8))}</li>`).join('') : '<li>まだ誰もいません</li>';
+}
+function refreshLobby(){ const ul=document.getElementById('lobbyList'), c=document.getElementById('lobbyCount'); if(ul){ ul.innerHTML=lobbyListHtml(); c.textContent=playerList().length+'人'; } }
+function seg(id, items, cur){ return `<div class="seg" id="${id}">${items.map(([v,l])=>`<button aria-pressed="${String(cur)===String(v)}" data-v="${v}">${l}</button>`).join('')}</div>`; }
+function oLobby(){
+  const S0=O.set;
+  app.innerHTML=`
+<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs n ・ オンライン</span></header>
+  <section class="panel">
+    <span class="cap">部屋コード</span>
+    <p class="roomcode num">${esc(O.code)}</p>
+    <p class="dim" style="text-align:center;font-size:.85rem">${O.isHost?'挑戦者はこのページを開いて、このコードで参加します':'ホストが始めるのを待っています…'}</p>
+  </section>
+  <section class="panel">
+    <div class="row"><span class="cap">参加者（${MAX_PLAYERS}人まで）</span><span class="num dim" id="lobbyCount">${playerList().length}人</span></div>
+    <ul class="plist" id="lobbyList">${lobbyListHtml()}</ul>
+  </section>
+</div><div class="col">${O.isHost?`<section class="panel">
+    <span class="cap">進め方</span>${seg('sMode',[['vote','ラウンド制（投票）'],['solo','個人戦（自動回答）']],S0.mode)}
+    <p class="dim" style="font-size:.82rem">${S0.mode==='vote'?'毎ラウンド全員が質問に投票し、一番多い質問にホストが答えます（嘘・ぼかし可）。各自は好きなときに数を宣言できます。':'挑戦者は各自のペースで質問し、この端末が自動で答えます（自動で嘘・ぼかしも混ぜます）。この画面は閉じないでください。'}</p>
+    <span class="cap">数の範囲</span>${seg('sN',[[30,'1〜30'],[50,'1〜50'],[100,'1〜100'],[1000,'1〜1000']],S0.N)}
+    <span class="cap">嘘</span>${seg('sL',[[true,'嘘あり'],[false,'嘘なし']],S0.lies)}
+    ${S0.mode==='vote'?`<span class="cap">ラウンド数</span>${seg('sR',[[6,'6'],[8,'8'],[10,'10'],[12,'12']],S0.R)}
+    <span class="cap">投票の時間</span>${seg('sV',[[15,'15秒'],[20,'20秒'],[30,'30秒']],S0.voteSec)}`
+    :`<span class="cap">制限時間</span>${seg('sT',[[5,'5分'],[8,'8分'],[10,'10分'],[15,'15分']],S0.soloMin)}`}
+    <span class="cap">秘密の数</span>
+    <div class="guess"><input type="number" id="secIn" min="1" max="${S0.N}" placeholder="おまかせ" value="${esc(S0.secret)}"><span class="dim" style="font-size:.85rem">挑戦者に見えないように入力</span></div>
+  </section>
+  <button class="btn wide" id="startBtn">このメンバーで開始</button>`:''}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div>`;
+  if(O.isHost){
+    const bind=(id,key,conv)=>document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{ S0[key]=conv(b.dataset.v); oRender(); });
+    bind('sMode','mode',v=>v); bind('sN','N',Number); bind('sL','lies',v=>v==='true');
+    if(document.getElementById('sR')) bind('sR','R',Number);
+    if(document.getElementById('sV')) bind('sV','voteSec',Number);
+    if(document.getElementById('sT')) bind('sT','soloMin',Number);
+    const si=document.getElementById('secIn'); si.oninput=()=>{ S0.secret=si.value; };
+    document.getElementById('startBtn').onclick=()=>{ if(!playerList().length){ O.err=''; return; } hostStart(); };
+  }
+  document.getElementById('leaveBtn').onclick=leaveRoom;
+}
+
+function oGridHtml(s){
+  const tiny=N>100, cols=N<=30?6:N<=100?10:40;
+  let h=`<div class="grid${tiny?' tiny':''}" style="grid-template-columns:repeat(${cols},1fr)" role="img" aria-label="残っている候補">`;
+  for(let n=1;n<=N;n++) h+=`<div class="cell${s[n]?'':' out'}">${tiny?'':n}</div>`;
+  return h+'</div>';
+}
+function boardPanel(cs, label){
+  const c=cnt(cs);
+  return `<section class="panel">
+    <div class="boardhead"><span class="dim" style="font-size:.85rem">${label}</span><button class="peek" id="peekBtn">${O.showBoard?'隠す':'見る'}</button></div>
+    ${O.showBoard?`<div class="row"><span></span><span class="count">${c}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+      ${c===0?'<p class="warn">候補が0個！ どこかに嘘があります</p>':''}${oGridHtml(cs)}${listHtml(cs)}`
+      :`<button class="veil" id="veilBtn">候補は隠れています。自分で考えてから、タップで確認</button>`}
+  </section>`;
+}
+function answersHtml(answers, opts){
+  opts=opts||{};
+  const a=toArr(answers);
+  if(!a.length) return '<li class="dim">まだ質問はありません</li>';
+  return a.map((x,i)=>{
+    const q=specQ(x.q);
+    let tags='';
+    if(x.type==='weak') tags+='<span class="tag weak">ぼかし</span>';
+    if(x.status==='revealed') tags+='<span class="tag lie">嘘だった</span>';
+    if(x.status==='confirmed') tags+='<span class="tag true">本当</span>';
+    if(opts.lieIdx && toArr(opts.lieIdx).includes(i) && x.status!=='revealed') tags+='<span class="tag lie">嘘</span>';
+    const said = x.type==='weak' ? `「n は ${x.weak.text}」` : (x.status==='revealed' ? !x.said : x.said) ? 'はい' : 'いいえ';
+    const shown = x.type==='weak' ? said : (x.said ? `はい（n は ${q.label}）` : `いいえ（n は ${q.neg}）`);
+    const canD = opts.doubt && x.type!=='weak' && !x.status;
+    return `<li><span class="at">第${i+1}問</span><span class="qt">n は ${esc(q.label)}？</span><span>${esc(shown)}${tags}</span>${x.type==='weak'?`<span class="why">${esc(x.weak.why)}</span>`:''}${canD?`<button class="doubt-btn" data-d="${i}">${opts.doubtLabel||'これは嘘だ！'}</button>`:''}</li>`;
+  }).reverse().join('');
+}
+function handHtml(){
+  const sel=O.sel, h=O.hand;
+  let preview='';
+  if(sel.length){
+    const q=compound(h[sel[0]], sel[1]!=null?h[sel[1]]:null, O.op), cs=myCand(), y=cnt(AND(cs,q.set)), t=cnt(cs);
+    preview=`<div class="qpreview">n は ${esc(q.label)}？${O.showBoard?`<small>今の候補${t}個のうち、「はい」なら${y}個、「いいえ」なら${t-y}個が残る</small>`:''}</div>`;
+  }
+  return `<span class="cap">手札（1枚、または2枚を「かつ／または」でつなぐ）</span>
+    <div class="hand">${h.map((c,i)=>`<button class="pcard" aria-pressed="${sel.includes(i)}" data-c="${i}">${esc(c.label)}</button>`).join('')}</div>
+    ${sel.length===2?`<div class="ops"><button aria-pressed="${O.op==='and'}" data-op="and">かつ</button><button aria-pressed="${O.op==='or'}" data-op="or">または</button></div>`:''}
+    ${preview}`;
+}
+function timerHtml(){ return `<span class="timer num" id="timer"></span>`; }
+function updTimer(){
+  const el=document.getElementById('timer'); const s=O.st;
+  if(!el || !s || !s.endsAt) return;
+  const sec=Math.max(0, Math.ceil((s.endsAt-fnow())/1000));
+  el.textContent = sec>=60 ? `残り ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}` : `残り ${sec}秒`;
+}
+function cutHtml(){
+  const c=O.cut; if(!c) return '';
+  return `<button class="cutin" id="cutin" aria-live="assertive"><div class="band">
+    <span class="who2">${esc(c.who||'')}</span>${c.q?`<span class="dim">${esc(c.q)}</span>`:''}
+    <span class="big ${c.cls||''}">${esc(c.big||'')}</span><span class="line">${esc(c.line||'')}</span><span class="hint">タップで次へ</span></div></button>`;
+}
+function hintBadgeO(h){ return h ? `<span class="hint ${h.lie?'on':''}">2割時点：ホストに隠れた嘘${h.lie?'あり':'なし'}</span>` : ''; }
+function rankingHtml(rows, cols){
+  return `<div class="tblwrap"><table class="rank"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function scoreRows(limit){
+  const s=O.st, sc=s.scores||{}, b=s.board||{};
+  const ids=playerList().map(([k])=>k);
+  ids.sort((x,y)=>((sc[y]||{}).pts||0)-((sc[x]||{}).pts||0) || ((b[x]||{}).asks||0)-((b[y]||{}).asks||0));
+  const rk=id=>1+ids.filter(z=>((sc[z]||{}).pts||0)>((sc[id]||{}).pts||0)).length;
+  return ids.slice(0,limit).map(id=>{
+    const x=sc[id]||{}, bb=b[id]||{};
+    return `<tr class="${id===uid?'me':''}"><td class="num">${rk(id)}</td><td>${esc(nameOf(id))}</td><td>${x.cleared?'<span class="tag true">正解</span>':''}</td>${s.mode==='solo'?`<td class="num">${bb.asks||0}${bb.pen?`+${bb.pen}`:''}</td>`:''}<td class="num">${x.pts||0}</td></tr>`;
+  }).join('');
+}
+
+function oGame(){
+  const s=O.st;
+  if(!s){ app.innerHTML='<section class="panel"><p class="dim">受信しています…</p></section>'; return; }
+  if(s.phase==='final') return oFinal();
+  if(O.isHost || O.screenOnly) return s.mode==='vote' ? hostVoteView() : hostSoloView();
+  return s.mode==='vote' ? stuVoteView() : stuSoloView();
+}
+function headBar(extra){
+  const sc=myScore();
+  return `<div class="topbar"><span class="cap">ROOM <span class="num">${esc(O.code)}</span></span>${extra||''}${(!O.isHost&&!O.screenOnly)?`<span class="chip num">${sc?sc.pts:0}点${sc&&sc.cleared?' ・ 正解済み':''}</span>`:''}</div>`;
+}
+
+/* --- ラウンド制：ホスト／スクリーン --- */
+function hostVoteView(){
+  const s=O.st, answers=toArr(s.answers), cs=candFrom(answers);
+  const nP=playerList().length, nC=Object.values(s.scores||{}).filter(x=>x.cleared).length;
+  let main='';
+  if(s.phase==='vote' || s.phase==='lastguess'){
+    main=`<section class="panel">
+      <div class="row"><h2>${s.phase==='lastguess'?'最後の宣言タイム':`ラウンド ${s.round+1} / ${s.R}：質問を投票`}</h2>${timerHtml()}</div>
+      <p class="big-num num"><span id="voteCnt">${O.isHost?O.H.voteCount:'-'}</span><small> / ${nP}人 投票</small></p>
+      <p class="dim" style="font-size:.85rem">${s.phase==='lastguess'?'これまでの答えから、ホストの数を宣言しよう。':'挑戦者は手札から質問を選んで投票。数がわかった人は投票の前に宣言もできます（外すと-10点）。全員が投票すると自動で締め切ります。'}</p>
+      ${O.isHost?`<button class="btn wide" id="closeBtn">締め切る</button>`:''}
+    </section>`;
+  } else if(s.phase==='tiepick'){
+    const ties=toArr(s.ties);
+    main=`<section class="panel">
+      <h2>同票！ ${O.isHost?'どれにするか選んでください':'ホストが選んでいます…'}</h2>
+      <p class="dim" style="font-size:.85rem">投票が同数になりました。</p>
+      <div class="ans tie">${ties.map((t,i)=>O.isHost?`<button class="tiebtn" data-tie="${i}">${esc(t.label)}<small>${t.n}票</small></button>`:`<p class="tieitem">${esc(t.label)} <small>${t.n}票</small></p>`).join('')}</div>
+    </section>`;
+  } else if(s.phase==='answer'){
+    const q=specQ(s.current.s);
+    main=`<section class="panel">
+      <span class="cap">ラウンド ${s.round+1} の質問（投票で決定）</span>
+      <p class="q-big">n は ${esc(q.label)}？</p>
+      ${toArr(s.tally).length?`<p class="dim" style="font-size:.82rem">得票：${toArr(s.tally).map(t=>`${esc(t.label)} ${t.n}票`).join(' ／ ')}</p>`:''}
+    </section>
+    ${O.isHost ? (O.ansVeil ? `<button class="veil big-veil" id="ansVeil">ホストだけが見てください：タップで答え方を表示<br><small>（プロジェクターに映っている場合は先に切り替えて）</small></button>` : hostAnswerHtml(q)) : '<section class="panel"><p class="dim">ホストが答えを考えています…</p></section>'}`;
+  }
+  app.innerHTML=`
+  <div class="cols"><div class="col">${headBar(`<span class="chip">正解 ${nC} / ${nP}人</span>`)}
+  ${main}
+  <section class="panel grow"><span class="cap">ランキング</span>${rankingHtml(scoreRows(10), ['順位','名前','','得点'])}</section>
+  ${O.isHost?`<button class="ghost" id="endBtn">ここで終了して結果を出す</button>`:''}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div><div class="col"><section class="panel grow">
+    <div class="row"><span class="cap">ホストの答え</span><span class="meta-r">${s.liesOn?'嘘の残りは秘密 ・ ':''}ぼかし 残${s.weakLeft}</span></div>
+    ${hintBadgeO(s.hint)}
+    <ul class="log">${answersHtml(answers)}</ul>
+  </section>
+  ${boardPanel(cs, '公開された答えと矛盾しない数')}</div></div>
+  ${cutHtml()}`;
+  bindCommon();
+  const $=id=>document.getElementById(id);
+  if($('closeBtn')) $('closeBtn').onclick=()=>closeVote();
+  if($('ansVeil')) $('ansVeil').onclick=()=>{ O.ansVeil=false; oRender(); };
+  document.querySelectorAll('[data-tie]').forEach(b=>b.onclick=()=>{ document.querySelectorAll('[data-tie]').forEach(x=>x.disabled=true); hostPickTie(+b.dataset.tie); });
+  if($('endBtn')) $('endBtn').onclick=()=>hostFinal(Object.assign({}, s.scores||{}));
+  document.querySelectorAll('[data-ans]').forEach(b=>b.onclick=()=>{ b.disabled=true; const t=b.dataset.ans; hostAnswer(t, t==='weak'?O._ops[+b.dataset.w]:null); });
+  updTimer();
+}
+function hostAnswerHtml(q){
+  const n=O.H.secret?O.H.secret.n:null; if(n==null) return '<section class="panel"><p class="warn">秘密の数が読み込めません。少し待ってください</p></section>';
+  const truth=!!q.set[n], s=O.st;
+  if(!O._ops || O._opsFor!==specKey(s.current.s)+s.round){ O._ops = s.weakLeft>0 ? weakOptions(q,n) : []; O._opsFor=specKey(s.current.s)+s.round; }
+  const honest = truth ? `はい（n は ${q.label}）` : `いいえ（n は ${q.neg}）`;
+  const lie = truth ? `いいえ（n は ${q.neg}）` : `はい（n は ${q.label}）`;
+  const lv=O.H.secret.liesLeft;
+  return `<section class="ask pop">
+    <span class="truth">秘密の数 ${n} は、この命題を<b>${truth?'満たします（真）':'満たしません（偽）'}</b></span>
+    <div class="ans">
+      <button data-ans="honest">正直に：${esc(honest)}<small>本当の答え</small></button>
+      ${s.liesOn?`<button class="lie" data-ans="lie" ${lv>0?'':'disabled'}>嘘をつく：${esc(lie)}<small>残り${lv}回。挑戦者のダウトで見破られる</small></button>`:''}
+      ${s.weakLeft>0?(O._ops.length?`<span class="cap">ぼかす（残り${s.weakLeft}回）</span>`+O._ops.map((o,i)=>`<button data-ans="weak" data-w="${i}">n は ${esc(o.text)}<small>${esc(o.why)}</small></button>`).join(''):'<span class="truth">この質問にはぼかせる答えがありません</span>'):''}
+    </div>
+  </section>`;
+}
+function patchHost(){
+  const v=document.getElementById('voteCnt'); if(v) v.textContent=O.H.voteCount;
+}
+function patchLive(){ oRender(); }
+
+/* --- ラウンド制：挑戦者 --- */
+function stuVoteView(){
+  const s=O.st, answers=toArr(s.answers), sc=myScore()||{}, k=`r${s.round}`;
+  if(N!==s.N){ N=s.N; buildLib(); }
+  const voted = O.myVoteKey.startsWith(k+':'), guessed = O.myGuessKey===k;
+  let main='';
+  if(s.phase==='vote'){
+    if(O.handFor!==k){ O.handFor=k; oRefreshHand(); O.sel=[]; }
+    const doubtable = s.liesOn && answers.some(x=>x.type!=='weak' && !x.status);
+    main=`<section class="panel">
+      <div class="row"><h2>ラウンド ${s.round+1} / ${s.R}</h2>${timerHtml()}</div>
+      ${voted?`<p class="toast">投票済み：${esc(O.myVoteLabel||'')}<br><small>締め切りまでなら選び直せます</small></p>`:''}
+      ${handHtml()}
+      <button class="btn wide" id="voteBtn" ${O.sel.length?'':'disabled'}>この質問に投票</button>
+      ${doubtable?'<p class="dim" style="font-size:.82rem">ホストが嘘をついていると思ったら、下の答えの一覧から「ダウトに投票」もできます。</p>':''}
+    </section>`;
+    main = guessPanel(sc, guessed) + main;
+  } else if(s.phase==='tiepick'){
+    main=`<section class="panel"><h2>同票！ ホストが選んでいます…</h2>${toArr(s.ties).map(t=>`<p class="tieitem">${esc(t.label)} <small>${t.n}票</small></p>`).join('')}</section>`;
+  } else if(s.phase==='answer'){
+    main=`<section class="panel"><p class="q-big">n は ${esc(specQ(s.current.s).label)}？</p><p class="dim">投票で決まった質問に、ホストが答えを考えています…</p></section>`;
+  } else if(s.phase==='lastguess'){
+    main=`<section class="panel"><div class="row"><h2>最後の宣言タイム</h2>${timerHtml()}</div></section>${guessPanel(sc, guessed, true)}`;
+  }
+  app.innerHTML=`
+  <div class="cols"><div class="col">${headBar()}
+  ${O.toast?`<div class="toast pop" role="status">${esc(O.toast)}</div>`:''}
+  ${main}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div><div class="col"><section class="panel grow">
+    <div class="row"><span class="cap">ホストの答え</span><span class="meta-r">${s.liesOn?'嘘の残りは秘密 ・ ':''}ぼかし 残${s.weakLeft}</span></div>
+    ${hintBadgeO(s.hint)}
+    <ul class="log">${answersHtml(answers, {doubt: s.phase==='vote' && s.liesOn, doubtLabel:'ダウトに投票'})}</ul>
+  </section>
+  ${boardPanel(candFrom(answers), 'ホストの答えと矛盾しない数')}</div></div>
+  ${cutHtml()}`;
+  bindCommon(); bindHand();
+  const $=id=>document.getElementById(id);
+  if($('voteBtn')) $('voteBtn').onclick=voteQ;
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>voteDoubt(+b.dataset.d));
+  if($('guessBtn')) $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } guessVote(g); };
+  updTimer();
+}
+function guessPanel(sc, guessed, last){
+  if(sc.cleared) return `<section class="panel"><p class="ok-msg">正解済み！ あとは他の人の様子を見よう</p></section>`;
+  if(guessed) return `<section class="panel"><p class="toast">「${O.myGuessVal}」と宣言しました。締め切りで判定されます</p></section>`;
+  return `<section class="panel">
+    <span class="cap">数の宣言（当たれば ${voteScore(O.st.round)}点・外すと-10点）${last?'':'：投票より先に'}</span>
+    <div class="guess"><input type="number" id="guessIn" min="1" max="${N}" placeholder="数"><button class="${last?'btn':'ghost'}" id="guessBtn">宣言する</button></div>
+  </section>`;
+}
+
+/* --- 個人戦：ホスト／スクリーン --- */
+function hostSoloView(){
+  const s=O.st, nP=playerList().length, b=s.board||{};
+  const nC=Object.values(b).filter(x=>x.cleared).length;
+  app.innerHTML=`
+  <div class="cols"><div class="col">${headBar(timerHtml())}
+  <section class="panel">
+    <h2>個人戦：それぞれのペースでホストの数をさぐれ</h2>
+    <p class="big-num num">${nC}<small> / ${nP}人 正解</small></p>
+    <p class="dim" style="font-size:.85rem">${O.isHost?'この端末が挑戦者の質問に自動で答えています。画面を閉じたり、スリープさせたりしないでください。':'ホストの端末が自動で答えています。'}</p>
+  </section>
+  ${O.isHost?`<button class="ghost" id="endBtn">ここで終了して結果を出す</button>`:''}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div><div class="col"><section class="panel grow"><span class="cap">ランキング（質問は「回数＋ペナルティ」）</span>${rankingHtml(scoreRows(50), ['順位','名前','','質問','得点'])}</section></div></div>
+  ${cutHtml()}`;
+  bindCommon();
+  const e=document.getElementById('endBtn'); if(e) e.onclick=soloFinish;
+  updTimer();
+}
+
+/* --- 個人戦：挑戦者 --- */
+function stuSoloView(){
+  const s=O.st, sc=myScore()||{};
+  if(N!==s.N){ N=s.N; buildLib(); }
+  if(!O.hand.length) oRefreshHand();
+  const qa=O.log.filter(r=>r.kind==='qa');
+  const answers=qa.map(r=>r.a);
+  const asks=qa.length, pen=O.log.reduce((t,r)=>t+(r.kind==='guess'&&!r.ok?3:0)+(r.kind==='doubt'&&!r.ok?2:0),0);
+  const doubtable = s.liesOn && answers.some(x=>x.type!=='weak' && !x.status);
+  app.innerHTML=`
+  <div class="cols"><div class="col">${headBar(timerHtml())}
+  ${O.toast?`<div class="toast pop" role="status">${esc(O.toast)}</div>`:''}
+  ${sc.cleared?`<section class="panel"><p class="ok-msg">正解！ ${sc.pts}点。ほかの人の結果を待とう</p></section>`:`
+  <section class="panel">
+    <div class="row"><span class="dim" style="font-size:.85rem">質問 ${asks}回${pen?` ＋ ペナルティ ${pen}`:''} ・ 今当てると ${Math.max(10,100-5*(asks+pen))}点</span></div>
+    ${handHtml()}
+    <button class="btn wide" id="askBtn" ${O.sel.length&&!O.wait?'':'disabled'}>${O.wait?'ホストの返事を待っています…':'この命題で質問する'}</button>
+    <div class="actions">
+      <div class="guess"><input type="number" id="guessIn" min="1" max="${N}" placeholder="数"><button class="ghost" id="guessBtn" ${O.wait?'disabled':''}>宣言する</button></div>
+    </div>
+    ${doubtable?'<p class="dim" style="font-size:.82rem">嘘だと思う答えがあれば、下の一覧から「これは嘘だ！」でダウト（外すと質問2回ぶん）。</p>':''}
+  </section>`}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div><div class="col"><section class="panel grow">
+    <div class="row"><span class="cap">ホストの答え</span></div>
+    ${hintBadgeO(O.myHint)}
+    <ul class="log">${answersHtml(answers, {doubt: !sc.cleared && s.liesOn && !O.wait})}</ul>
+  </section>
+  ${boardPanel(myCand(), 'ホストの答えと矛盾しない数')}</div></div>
+  ${cutHtml()}`;
+  bindCommon(); bindHand();
+  const $=id=>document.getElementById(id);
+  if($('askBtn')) $('askBtn').onclick=()=>{ if(!O.sel.length) return; O.usedIdx=O.sel.slice(); sendReq({kind:'q', s:selSpec()}); };
+  if($('guessBtn')) $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } O.usedIdx=[]; sendReq({kind:'guess', g}); };
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.d; O.usedIdx=[]; sendReq({kind:'doubt', i:qa[i].i}); });
+  updTimer();
+}
+
+/* --- 結果 --- */
+function oFinal(){
+  const s=O.st, sc=myScore();
+  const answers=toArr(s.answers);
+  const me = !O.isHost && !O.screenOnly;
+  app.innerHTML=`
+  <div class="cols"><div class="col"><header class="title result"><h2>${s.classWin?'挑戦者の勝ち！':'ホストの勝ち！'}</h2>
+    <span class="sub">秘密の数は <b class="num" style="font-size:1.4rem;color:var(--card)">${s.secretN}</b> ・ 正解 ${s.nClear}人 / ${s.nPlayers}人（過半数で挑戦者の勝ち）</span></header>
+  ${me?`<section class="panel"><p class="ok-msg">${sc&&sc.cleared?`あなたは正解！ ${sc.pts}点`:`あなたは ${sc?sc.pts:0}点`}</p></section>`:''}
+  ${O.isHost?`<button class="btn wide" id="againBtn">ロビーにもどる</button>`:'<p class="dim" style="text-align:center;font-size:.85rem">ホストが次のゲームを準備するとロビーにもどります</p>'}
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div><div class="col"><section class="panel grow"><span class="cap">ランキング</span>${rankingHtml(scoreRows(50), s.mode==='solo'?['順位','名前','','質問','得点']:['順位','名前','','得点'])}</section>
+  ${s.mode==='vote'?`<section class="panel grow"><span class="cap">ホストの答え（嘘も公開）</span><ul class="log">${answersHtml(answers,{lieIdx:s.lieIdx})}</ul></section>`:''}</div></div>
+  ${cutHtml()}`;
+  bindCommon();
+  const a=document.getElementById('againBtn'); if(a) a.onclick=hostBack;
+}
+
+function bindCommon(){
+  const $=id=>document.getElementById(id);
+  const tog=()=>{ O.showBoard=!O.showBoard; oRender(); };
+  if($('peekBtn')) $('peekBtn').onclick=tog;
+  if($('veilBtn')) $('veilBtn').onclick=tog;
+  if($('cutin')) $('cutin').onclick=()=>{ clearTimeout(O.cutT); O.cut=null; oRender(); };
+  if($('leaveBtn')) $('leaveBtn').onclick=leaveRoom;
+}
+function bindHand(){
+  document.querySelectorAll('.pcard').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.c, k=O.sel.indexOf(i);
+    if(k>=0) O.sel.splice(k,1); else { if(O.sel.length>=2) O.sel.shift(); O.sel.push(i); }
+    oRender();
+  });
+  document.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ O.op=b.dataset.op; oRender(); });
+}
+
+/* ================= メニュー ================= */
+let fbStarted=false;
+function goMenu(){
+  clearTimeout(cutTimer); S=null;
+  app.innerHTML=`
+  <header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">真か、偽か、それとも嘘か</span></header>
+  <section class="panel menu">
+    <button class="btn wide" id="mCpu">1 vs 1<small>CPUと対戦（ひとりで練習）</small></button>
+    <button class="btn wide alt" id="mOnline">1 vs n<small>オンライン ・ 1 ≦ n ≦ ${MAX_PLAYERS}<br>n = 1 ならオンラインで1対1の対戦</small></button>
+  </section>`;
+  document.getElementById('mCpu').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
+  document.getElementById('mOnline').onclick=()=>{ if(!fbStarted){ fbStarted=true; fbInit(); } O.scr='home'; oRender(); window.scrollTo(0,0); };
+}
+goMenu();
+
+})();
+</script>
+</body>
+</html>
