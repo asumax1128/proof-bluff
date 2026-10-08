@@ -123,6 +123,7 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
 .cutin .big.yes{color:var(--ok)} .cutin .big.no{color:var(--bad)} .cutin .big.weak{color:#9cc0f0} .cutin .big.info{color:var(--card)}
 .cutin .line{font-weight:700;font-size:1.05rem;text-align:center;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
 .cutin .hint{font-size:.78rem;color:var(--dim)}
+.cutin .line{white-space:pre-line}
 @media (prefers-reduced-motion: no-preference){
   .cutin .band{animation:slide .35s cubic-bezier(.2,.9,.3,1.2)}
   .cutin .big{animation:stamp .4s .1s both cubic-bezier(.2,.9,.3,1.4)}
@@ -160,7 +161,28 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
   .title{padding-block:4px 0}
   .pcard{min-height:64px;padding:8px 6px;font-size:.9rem}
 }
-@media (min-width:1000px) and (min-height:560px){ .hand{grid-template-columns:repeat(5,minmax(0,1fr))} }
+.hand{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* ---- 1 vs 1 の追加 ---- */
+.turn .turnno,.turn .matchline{display:block;font-family:var(--f-num);font-size:.75rem;color:var(--dim);letter-spacing:.04em}
+.turn .matchline{color:var(--rail)}
+.grid.mark .cell{min-height:0;padding:0;border:none;font:inherit;font-family:var(--f-num);font-size:.78rem;font-weight:600;cursor:pointer;touch-action:manipulation}
+.grid.mark .cell.x{position:relative}
+.grid.mark .cell.x::after{content:"";position:absolute;inset:22% ;background:linear-gradient(45deg,transparent 46%,rgba(255,255,255,.35) 46% 54%,transparent 54%)}
+.tag.inq{background:#e9c46a;color:#2a1d00}
+.inqbtn{background:transparent;color:var(--text);border:1px dashed #e9c46a;text-align:left;padding:8px 12px;font-weight:700}
+.inqbtn small{display:block;font-weight:500;color:var(--dim);font-size:.78rem}
+.inqbtn[aria-pressed="true"]{background:#e9c46a;color:#2a1d00;border-style:solid}
+.inqbtn[aria-pressed="true"] small{color:#5a4410}
+.inqbtn:disabled{opacity:.4;cursor:default}
+.inqmark{display:inline-block;background:#e9c46a;color:#2a1d00;border-radius:4px;padding:0 6px;margin-right:6px;font-size:.8rem}
+.inqnote{font-size:.85rem;font-weight:700;color:#8a6400}
+.grid.rv .cell.liecut{background:var(--red);color:#fff}
+.grid.rv .cell.sec{box-shadow:0 0 0 2px #e9c46a inset, 0 0 0 1px #e9c46a}
+.liekey{background:var(--red);color:#fff;border-radius:3px;padding:0 4px}
+.rvstep{border-left:3px solid var(--line);padding:4px 0 4px 10px;display:flex;flex-direction:column;gap:2px;font-size:.9rem;min-height:3.4em}
+.rvstep.lie{border-left-color:var(--red)}
+.rvstep .at{color:var(--dim)} .rvstep .qt{font-weight:700}
+input[type=range]{width:100%;accent-color:var(--rail);min-height:32px}
 /* ---- オンライン ---- */
 .tiebtn{text-align:left;padding:12px 14px;border:2px solid var(--card-dk);background:var(--card);color:var(--ink);font-weight:700;font-size:1.05rem}
 .tiebtn small{display:block;font-weight:500;color:var(--ink-dim);font-size:.8rem}
@@ -210,8 +232,8 @@ table.rank{width:100%;border-collapse:collapse;font-size:.9rem}
 <script>
 (function(){
 /* ============ 設定 ============ */
-const MODES = {30:{lies:1,weak:2}, 50:{lies:1,weak:2}, 100:{lies:2,weak:3}, 1000:{lies:2,weak:3}};
-const HAND = 5;
+const MODES = {30:{lies:1,weak:2}, 50:{lies:1,weak:2}, 100:{lies:1,weak:3}};   // 嘘はどの範囲でも1回だけ
+const HAND = 6;
 const app = document.getElementById('app');
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rint=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
@@ -327,29 +349,53 @@ function weakOptions(q, n){
 }
 
 /* ============ 状態 ============ */
-let cfg = {N:50, diff:'normal', mySecret:'', lies:true};
-let showBoard = false;   // 候補の盤面（タップで表示／非表示）
-let S = null;
-let view = 'opp';       // 盤面タブ：opp=相手の数 / me=相手から見た自分の数
+let cfg = {N:50, lv:3, board:'easy', mySecret:'', lies:true, games:1};
+/* CPUのレベル：1 ほぼでたらめ ／ 2〜4 旧やさしい・ふつう・つよい ／ 5 最善手＋読み */
+const LV = {
+  1:{name:'レベル1', note:'ほぼでたらめに質問する。ダウトもほとんどしない',            pLie:.1,  pWeak:.2, pair:false, hintDoubt:0,  guessAt:1, inq:0,   sure:false},
+  2:{name:'レベル2', note:'1枚のカードで素直に質問する',                                pLie:.2,  pWeak:.3, pair:false, hintDoubt:.5, guessAt:1, inq:.3,  sure:false},
+  3:{name:'レベル3', note:'2枚を組み合わせて絞ってくる。ときどき甘い手も',              pLie:.4,  pWeak:.5, pair:true,  hintDoubt:.8, guessAt:2, inq:.6,  sure:false},
+  4:{name:'レベル4', note:'いつも一番絞れる質問をする',                                  pLie:.55, pWeak:.6, pair:true,  hintDoubt:1,  guessAt:2, inq:.85, sure:false},
+  5:{name:'レベル5', note:'最善の質問に加えて、嘘・尋問・宣言のタイミングまで読んでくる', pLie:.8,  pWeak:.7, pair:true,  hintDoubt:1,  guessAt:2, inq:1,   sure:true},
+};
+const BOARD = {easy:'イージー', normal:'ノーマル'};
+const HINT_TURN = 5;   // あなたの5ターン目が終わった時点で、おたがいの嘘の有無を発表
+let S = null;          // 1ゲームの状態
+let M = null;          // 勝負全体（1〜3本）の状態
+let view = 'opp';      // 盤面タブ：opp=相手の数 / me=相手から見た自分の数
+let showMe = false;    // 「CPUから見たあなた」の表示
 let hidden = false;
 const other = p => p==='h'?'c':'h';
 const NAME = {h:'あなた', c:'CPU'};
+/* 勝ち点：勝つと2点。自分のターン数が3以内+5、5以内+3、10以内+1 */
+const bonusFor = t => t<=3 ? 5 : t<=5 ? 3 : t<=10 ? 1 : 0;
+const ptsFor = t => 2 + bonusFor(t);
 
+function startMatch(){
+  M = {games:cfg.games, no:0, pts:{h:0,c:0}, results:[]};
+  newGame();
+}
 function newGame(){
   N = cfg.N; buildLib();
   const m = MODES[N];
   const mine = parseInt(cfg.mySecret,10);
+  M.no++;
+  const first = M.no%2===1 ? 'h' : 'c';   // 先手は1戦ごとに交代
   S = {
-    N, diff:cfg.diff,
+    N, lv:cfg.lv, board:cfg.board,
     sec:{h: (mine>=1 && mine<=N) ? mine : rint(1,N), c: rint(1,N)},
     hand:{h:[], c:[]},
-    lies:{h:cfg.lies?m.lies:0, c:cfg.lies?m.lies:0}, weak:{h:m.weak, c:m.weak}, liesOn:cfg.lies, cut:null, hint:{h:null, c:null},
-    recs:[], turn:'h', skip:{h:0,c:0}, extra:false,
-    phase:'act', sel:[], op:'and', pending:null, winner:null, toast:'', asks:{h:0,c:0}
+    lies:{h:cfg.lies?m.lies:0, c:cfg.lies?m.lies:0}, weak:{h:m.weak, c:m.weak}, inq:{h:1, c:1},
+    liesOn:cfg.lies, cut:null, hint:null, hintDone:false,
+    recs:[], turn:first, first, skip:{h:0,c:0}, extra:false, turnNo:{h:0,c:0},
+    phase:'act', sel:[], op:'and', inqOn:false, pending:null, winner:null, toast:'', asks:{h:0,c:0},
+    marks:{}, restore:null, rv:null
   };
-  view='opp'; hidden=false; showBoard=false;
+  cfg.mySecret='';
+  view='opp'; hidden=false; showMe=false;
   refreshHand('h'); refreshHand('c');
-  render(); window.scrollTo(0,0);
+  startTurn(first);
+  window.scrollTo(0,0);
 }
 
 /* X の数についての「公開された手がかり」から残る候補 */
@@ -371,6 +417,29 @@ function candIf(X, idx){   // idx の答えが嘘だった場合の候補
   const r=S.recs[idx]; const saved=r.status; r.status='revealed';
   const s=cand(X); r.status=saved; return s;
 }
+/* ふり返り用：k手目までの時点の候補（truthful=true なら嘘をすべて本当に直した候補） */
+function candAt(X, k, truthful){
+  const rev=new Set();
+  for(let i=0;i<k;i++){ const r=S.recs[i]; if(r.kind==='doubt' && r.ok) rev.add(r.idx); }
+  let s=ALL();
+  for(let i=0;i<k;i++){
+    const r=S.recs[i];
+    if(r.kind==='qa' && r.ans===X){
+      let c;
+      if(r.type==='weak') c=r.weak.set;
+      else { const said=(truthful||rev.has(i)) ? r.truth : r.said; c = said ? r.q.set : NOT(r.q.set); }
+      s=AND(s,c);
+    } else if(r.kind==='guess' && r.target===X && !r.ok) s=AND(s, mk(n=>n!==r.g));
+  }
+  return s;
+}
+/* ダウトできる答え：はい／いいえで、まだ確定しておらず、尋問でないもの */
+const doubtable = (r, X) => r.kind==='qa' && r.ans===X && r.type!=='weak' && !r.status && !r.q.inq;
+
+/* ノーマルモード：自分で消した数（値は、消したときの最新のCPUの答えの番号） */
+function lastCpuAns(){ for(let i=S.recs.length-1;i>=0;i--){ const r=S.recs[i]; if(r.kind==='qa' && r.ans==='c') return i; } return -1; }
+const isMarked = n => S.marks[n]!==undefined;
+const markSet = () => mk(n=>!isMarked(n));
 
 /* ============ カットイン ============ */
 let cutTimer=null;
@@ -385,46 +454,45 @@ function closeCut(){
   if(t) t(); else render();
 }
 function cutForQA(r){
-  const who = r.ans==='h' ? 'あなたの答え' : 'CPUの答え';
+  const who = (r.ans==='h' ? 'あなたの答え' : 'CPUの答え') + (r.q.inq ? '（尋問）' : '');
   if(r.type==='weak') return {who, big:'ぼかし', cls:'weak', line:`n は ${r.weak.text}`};
   return r.said ? {who, big:'はい', cls:'yes', line:`n は ${r.q.label}`} : {who, big:'いいえ', cls:'no', line:`n は ${r.q.neg}`};
 }
 
-/* 候補が全体の2割を下回ると、X が「まだ見破られていない嘘」をついているかが公開される */
-/* 公開は一度きり。2割を切った瞬間の状態を記録し、その後は更新しない（後からついた嘘はばれない） */
-function updateHints(){
-  if(!S.liesOn) return;
-  for(const X of ['h','c']){
-    if(S.hint[X]===null && cnt(cand(X)) < N*0.2){
-      S.hint[X] = {lie: S.recs.some(r=>r.kind==='qa' && r.ans===X && r.lie && r.status!=='revealed'), at: S.recs.length, seen:false};
-    }
-  }
+/* あなたの5ターン目が終わった時点で、おたがいに「まだ見破られていない嘘」があるかを一度だけ発表 */
+function maybeHint(then){
+  if(!S.liesOn || S.hintDone || S.turnNo.h<HINT_TURN) return false;
+  S.hintDone=true;
+  const has = X => S.recs.some(r=>r.kind==='qa' && r.ans===X && r.lie && r.status!=='revealed');
+  S.hint = {h:has('h'), c:has('c'), at:S.recs.length};
+  showCut({who:`あなたの${HINT_TURN}ターン目が終了 ・ 嘘の発表`, big:S.hint.c?'嘘あり':'嘘なし', cls:S.hint.c?'no':'yes',
+    line:`CPU：${S.hint.c?'まだ見破られていない嘘をついている':'ここまでの答えは全部本当'}\nあなた：${S.hint.h?'ばれていない嘘あり（CPUにも伝わった）':'隠れた嘘なし'}\n（発表はこの1回だけ）`, ms:4600}, then);
+  return true;
 }
-function lieHint(X){ return S.hint[X] ? S.hint[X].lie : null; }
-/* 公開後に X の嘘を見破ったか（CPUがダウトをやめる目安） */
-const hintResolved = X => S.hint[X] && S.recs.some((r,i)=>r.kind==='doubt' && r.ok && S.recs[r.idx].ans===X && i>=S.hint[X].at);
+function lieHint(X){ return S.hint ? S.hint[X] : null; }
+/* 発表後に X の嘘を見破ったか（CPUがダウトをやめる目安） */
+const hintResolved = X => S.hint && S.recs.some((r,i)=>r.kind==='doubt' && r.ok && S.recs[r.idx].ans===X && i>=S.hint.at);
 
 /* ============ 進行 ============ */
 function log(rec){ S.recs.push(rec); }
 function endTurn(who){
   if(S.winner) return;
-  if(S.extra){ S.extra=false; startTurn(who); } else startTurn(other(who));
+  if(S.extra){ S.extra=false; startTurn(who, true); } else startTurn(other(who));
 }
-function startTurn(p){
+/* cont=true：ダウト成功でもう一度行動（同じターンの続き） */
+function startTurn(p, cont){
   if(S.winner) return;
-  if(S.skip[p]>0){ S.skip[p]--; log({kind:'skip', who:p}); return startTurn(other(p)); }
-  S.turn=p; S.sel=[]; S.pending=null;
-  updateHints();
+  if(!cont && maybeHint(()=>startTurn(p))) return;
+  if(!cont){
+    S.turnNo[p]++;
+    if(S.skip[p]>0){ S.skip[p]--; log({kind:'skip', who:p}); return startTurn(other(p)); }
+  }
+  S.turn=p; S.sel=[]; S.pending=null; S.inqOn=false;
   refreshHand(p);
   if(p==='h'){
-    S.phase='act';
-    const hint=lieHint('c');
-    if(hint!==null && !S.hint.c.seen){
-      S.hint.c.seen=true;
-      return showCut({who:'候補が2割を切った', big:hint?'嘘あり':'嘘なし', cls:hint?'no':'yes',
-        line:(hint?'CPUは、まだ見破られていない嘘をついている':'CPUの答えは、ここまで全部本当')+'（この表示はもう更新されない）', ms:3400}, ()=>render());
-    }
-    render();
+    S.phase = S.restore ? 'restore' : 'act'; render();
+    // スマホでは記録の下のほうでダウトしているので、戻すかどうかの質問が見える位置まで動かす
+    if(S.restore){ const el=document.getElementById('rsYes'); if(el && el.scrollIntoView) el.scrollIntoView({block:'center'}); }
   }
   else { S.phase='cpu'; render(); setTimeout(cpuAct, 900); }
 }
@@ -445,7 +513,14 @@ function doGuess(who, g){
   const target=other(who), ok = g===S.sec[target];
   log({kind:'guess', who, target, g, ok});
   const head = who==='h' ? 'あなたの宣言' : 'CPUの宣言';
-  if(ok){ showCut({who:head, big:'正解', cls:'yes', line:`秘密の数は ${g}`}, ()=>{ S.winner=who; S.phase='over'; render(); window.scrollTo(0,0); }); return; }
+  if(ok){
+    const t=S.turnNo[who], pts=ptsFor(t);
+    M.pts[who]+=pts; M.results.push({winner:who, turns:t, pts, secH:S.sec.h, secC:S.sec.c});
+    showCut({who:head, big:'正解', cls:'yes', line:`秘密の数は ${g} ・ ${t}ターン目で正解 ・ +${pts}点`}, ()=>{
+      S.winner=who; S.phase='over'; S.rv={k:S.recs.length, X:'c'}; render(); window.scrollTo(0,0);
+    });
+    return;
+  }
   S.skip[who]=1;
   S.toast = who==='h' ? `はずれ！ ${g} ではありません。次の手番は休みです` : `CPUの宣言「${g}」ははずれ。CPUは次の手番が休みです`;
   showCut({who:head, big:'はずれ', cls:'no', line:`「${g}」ではない ・ 1回休み`}, ()=>endTurn(who));
@@ -457,6 +532,11 @@ function doDoubt(who, idx){
     log({kind:'doubt', who, idx, ok:true});
     S.extra=true;
     S.toast = who==='h' ? 'ダウト成功！ 嘘を見破った。もう一度行動できます' : 'CPUにダウトされた！ 嘘がばれました。CPUがもう一度行動します';
+    // ノーマルモード：その嘘のあと（次のCPUの答えまで）に自分で消した数を、戻すかどうか聞く
+    if(who==='h' && S.board==='normal'){
+      const nums=Object.keys(S.marks).map(Number).filter(n=>S.marks[n]===idx).sort((a,b)=>a-b);
+      if(nums.length) S.restore={idx, nums};
+    }
     const real = r.truth ? `本当は「n は ${r.q.label}」` : `本当は「n は ${r.q.neg}」`;
     return showCut({who:NAME[who]+'のダウト', big:'見破った', cls:'yes', line:real}, ()=>endTurn(who));
   } else {
@@ -470,60 +550,71 @@ function doDoubt(who, idx){
 
 /* ============ CPU ============ */
 function cpuAnswer(q){
+  if(q.inq) return makeQA('h', q, 'honest');   // 尋問には正直に答えるしかない
+  const L=LV[S.lv];
   const n=S.sec.c, truth=!!q.set[n];
   const cur=cand('c'), cc=cnt(cur);
   const after=cnt(AND(cur, truth?q.set:NOT(q.set)));
   const ratio = cc ? after/cc : 1;
   const lieAfter=cnt(AND(cur, truth?NOT(q.set):q.set));
-  const pLie = {easy:.2, normal:.4, hard:.55}[S.diff];
-  const pWeak = {easy:.3, normal:.5, hard:.6}[S.diff];
-  if(S.weak.c>0 && ratio<.55 && Math.random()<pWeak){
+  // レベル5：発表（あなたの5ターン目終了）の直前は、嘘がばれるので嘘を控える
+  const nearHint = L.sure && S.liesOn && !S.hintDone && S.turnNo.h>=HINT_TURN-1;
+  if(S.lies.c>0 && !nearHint && lieAfter>=1 && (ratio<.4 || after<=3) && lieAfter>after && Math.random()<L.pLie*(after<=3?1.5:1)){
+    return makeQA('h', q, 'lie');
+  }
+  if(S.weak.c>0 && ratio<.55 && Math.random()<L.pWeak){
     const ops=weakOptions(q,n);
     if(ops.length) return makeQA('h', q, 'weak', ops[0]);
-  }
-  if(S.lies.c>0 && lieAfter>=1 && (ratio<.4 || after<=3) && lieAfter>after && Math.random()<pLie*(after<=3?1.5:1)){
-    return makeQA('h', q, 'lie');
   }
   return makeQA('h', q, 'honest');
 }
 function bestQuestion(cs){
-  const hand=S.hand.c, total=cnt(cs);
+  const L=LV[S.lv], hand=S.hand.c, total=cnt(cs);
   const opts=[];
   hand.forEach((a,i)=>{ opts.push({idx:[i], q:compound(a)}); });
-  if(S.diff!=='easy'){
+  if(L.pair){
     for(let i=0;i<hand.length;i++) for(let j=i+1;j<hand.length;j++){
       opts.push({idx:[i,j], q:compound(hand[i],hand[j],'and')});
       opts.push({idx:[i,j], q:compound(hand[i],hand[j],'or')});
     }
   }
   opts.forEach(o=>{ const y=cnt(AND(cs,o.q.set)); o.score = Math.abs(total-2*y) + (o.idx.length-1)*total*.08 + (y===0||y===total ? total*3 : 0); });
-  if(S.diff==='easy') return pick(opts.filter(o=>o.score<total*3).concat(opts).slice(0, Math.max(1,opts.length)));
+  if(S.lv===1) return pick(opts);
+  if(S.lv===2){ const good=opts.filter(o=>o.score<total*3); return pick(good.length?good:opts); }
   opts.sort((a,b)=>a.score-b.score);
-  if(S.diff==='normal' && Math.random()<.3) return pick(opts.slice(0,Math.min(4,opts.length)));
+  if(S.lv===3 && Math.random()<.3) return pick(opts.slice(0,Math.min(4,opts.length)));
   return opts[0];
 }
+function bestDoubt(){
+  let best=-1, bestN=-1;
+  S.recs.forEach((r,i)=>{ if(doubtable(r,'h')){ const k=cnt(candIf('h',i)); if(k>bestN || (k===bestN && Math.random()<.5)){ bestN=k; best=i; } } });
+  return best;
+}
 async function cpuAct(){
-  if(S.winner || S.turn!=='c') return;
+  if(!S || S.winner || S.turn!=='c') return;
+  const L=LV[S.lv];
   const cs=cand('h'), c=cnt(cs);
   if(c===0){
     // 矛盾 → どれかが嘘。ひっくり返すと一番候補が残る答えにダウト
-    let best=-1, bestN=-1;
-    S.recs.forEach((r,i)=>{ if(r.kind==='qa' && r.ans==='h' && r.type!=='weak' && !r.status){ const k=cnt(candIf('h',i)); if(k>=bestN){ bestN=k; best=i; } } });
+    const best=bestDoubt();
     if(best>=0){ doDoubt('c', best); return; }
   }
-  // 候補が2割を切ると、あなたに隠れた嘘があるかが分かる
-  const hint=lieHint('h');
-  if(hint===true && !hintResolved('h') && c>0 && Math.random() < ({easy:.5, normal:.8, hard:1})[S.diff]){
-    let best=-1, bestN=-1;
-    S.recs.forEach((r,i)=>{ if(r.kind==='qa' && r.ans==='h' && r.type!=='weak' && !r.status){ const k=cnt(candIf('h',i)); if(k>bestN || (k===bestN && Math.random()<.5)){ bestN=k; best=i; } } });
+  // 発表で「あなたに隠れた嘘あり」と分かっていれば、ダウトを狙う
+  if(lieHint('h')===true && !hintResolved('h') && c>0 && Math.random()<L.hintDoubt){
+    const best=bestDoubt();
     if(best>=0){ doDoubt('c', best); return; }
   }
-  const guessAt = {easy:1, normal:2, hard:2}[S.diff];
-  if(c>=1 && c<=guessAt && (c===1 || Math.random()<.6)){
+  if(c>=1 && c<=L.guessAt && (c===1 || L.sure || Math.random()<.6)){
     const list=[]; for(let n=1;n<=N;n++) if(cs[n]) list.push(n);
     doGuess('c', pick(list)); return;
   }
   const o = bestQuestion(c?cs:ALL());
+  // 尋問：候補がしぼれてきて、あなたがまだ嘘やぼかしを使えそうなとき
+  const humanLieUsed = S.recs.some(r=>r.kind==='doubt' && r.ok && S.recs[r.idx].ans==='h');
+  const canTrick = (S.liesOn && !humanLieUsed) || S.weak.h>0;
+  if(S.inq.c>0 && L.inq>0 && canTrick && c>=3 && c<=(L.sure?12:8) && Math.random()<L.inq){
+    o.q.inq=true; S.inq.c--;
+  }
   useCards('c', o.idx.slice());
   S.pending = o.q; S.phase='answer';
   render();
@@ -533,9 +624,10 @@ async function cpuAct(){
 function humanAsk(){
   const h=S.hand.h, a=h[S.sel[0]], b=S.sel[1]!=null ? h[S.sel[1]] : null;
   const q=compound(a,b,S.op);
+  if(S.inqOn && S.inq.h>0){ q.inq=true; S.inq.h--; }
   useCards('h', S.sel.slice());
   const r=cpuAnswer(q); log(r);
-  S.toast=''; S.sel=[]; S.phase='wait';
+  S.toast=''; S.sel=[]; S.inqOn=false; S.phase='wait';
   showCut(Object.assign(cutForQA(r), {q:`n は ${q.label}？`}), ()=>endTurn('h'));
 }
 function humanAnswer(type, extra){
@@ -551,8 +643,10 @@ function render(){
   renderGame();
 }
 function renderStart(){
-  const segN=[30,50,100,1000].map(n=>`<button aria-pressed="${cfg.N===n}" data-n="${n}">1〜${n}</button>`).join('');
-  const segD=[['easy','やさしい'],['normal','ふつう'],['hard','つよい']].map(([k,l])=>`<button aria-pressed="${cfg.diff===k}" data-d="${k}">${l}</button>`).join('');
+  const segN=[30,50,100].map(n=>`<button aria-pressed="${cfg.N===n}" data-n="${n}">1〜${n}</button>`).join('');
+  const segB=Object.entries(BOARD).map(([k,l])=>`<button aria-pressed="${cfg.board===k}" data-b="${k}">${l}</button>`).join('');
+  const segD=[1,2,3,4,5].map(k=>`<button aria-pressed="${cfg.lv===k}" data-d="${k}">${k}</button>`).join('');
+  const segG=[1,2,3].map(k=>`<button aria-pressed="${cfg.games===k}" data-g="${k}">${k}本勝負</button>`).join('');
   const m=MODES[cfg.N];
   const segL=[[true,'嘘あり'],[false,'嘘なし']].map(([k,l])=>`<button aria-pressed="${cfg.lies===k}" data-l="${k}">${l}</button>`).join('');
   app.innerHTML=`
@@ -562,35 +656,47 @@ function renderStart(){
     <ul class="rules">
       <li>おたがいに秘密の数を持ち、命題カードで質問して相手の数を当てる。先に当てたほうの勝ち。</li>
       <li>手札のカード1枚で質問するか、2枚を「かつ」「または」でつないで質問する。</li>
-      <li>答える側は「はい／いいえ」で正直に答えるほかに、${cfg.lies?`<b>嘘</b>（${m.lies}回まで）と`:''}<b>ぼかし</b>（${m.weak}回まで）が使える。</li>
-      <li>ぼかしは、本当だけど弱い答え。「6の倍数？」に「偶数です」と返すような答え方。</li>
-      ${cfg.lies?'<li>相手の数の候補が全体の2割を下回ると、相手が<b>まだ見破られていない嘘</b>をついているかどうかが<b>一度だけ</b>公開される。公開後についた嘘は表示に反映されない（相手にも同じ条件でこちらの情報が公開される）。</li>':''}
-      ${cfg.lies?'<li>自分の番に、相手の「はい／いいえ」の答えを1つ選んで<b>ダウト</b>できる。当たればもう一度行動、外れたら1回休み。</li>':'<li><b>嘘なしモード</b>：嘘とダウトはなし。答えはすべて本当なので、論理だけで絞り込む。</li>'}
+      <li>答える側は「はい／いいえ」で正直に答えるほかに、${cfg.lies?`<b>嘘</b>（1回だけ）と`:''}<b>ぼかし</b>（${m.weak}回まで）が使える。ぼかしは「6の倍数？」に「偶数です」と返すような、本当だけど弱い答え。</li>
+      <li><b>尋問</b>（1回だけ）：その質問には、相手は嘘もぼかしも使えない。</li>
+      ${cfg.lies?`<li><b>あなたの${HINT_TURN}ターン目が終わった時点</b>で、おたがいに<b>まだ見破られていない嘘</b>があるかが一度だけ発表される。その後は発表なし。</li>
+      <li>自分の番に、相手の「はい／いいえ」の答えを1つ選んで<b>ダウト</b>できる。当たればもう一度行動、外れたら1回休み。</li>`:'<li><b>嘘なし</b>：嘘とダウトはなし。答えはすべて本当なので、論理だけで絞り込む。</li>'}
       <li>数の宣言を外すと1回休み。</li>
+      <li><b>勝ち点</b>：勝つと2点。勝ったときの自分のターン数が3以内なら+5、5以内なら+3、10以内なら+1。合計点で勝負（先手は1戦ごとに交代）。</li>
     </ul>
   </section>
 </div><div class="col"><section class="panel">
+    <span class="cap">モード</span><div class="seg" id="segB">${segB}</div>
+    <p class="dim" style="font-size:.82rem">${cfg.board==='easy'?'イージー：CPUの答えと矛盾する数が自動で消える。':'ノーマル：盤面の数を自分でタップして消す（もう一度タップで戻る）。'}</p>
     <span class="cap">数の範囲</span><div class="seg" id="segN">${segN}</div>
     <span class="cap">嘘</span><div class="seg" id="segL">${segL}</div>
-    <span class="cap">CPUの強さ</span><div class="seg" id="segD">${segD}</div>
-    <span class="cap">あなたの秘密の数</span>
+    <span class="cap">CPUのレベル</span><div class="seg" id="segD">${segD}</div>
+    <p class="dim" style="font-size:.82rem">${esc(LV[cfg.lv].name)}：${esc(LV[cfg.lv].note)}</p>
+    <span class="cap">勝負の数</span><div class="seg" id="segG">${segG}</div>
+    <span class="cap">あなたの秘密の数（第1戦）</span>
     <div class="guess"><input type="number" id="mySec" min="1" max="${cfg.N}" placeholder="おまかせ" value="${esc(cfg.mySecret)}"><span class="dim" style="font-size:.85rem">空欄なら自動で決まります</span></div>
   </section>
   <button class="btn wide" id="startBtn">ゲーム開始</button>
   <button class="ghost" id="menuBtn">メニューにもどる</button></div></div>`;
   document.getElementById('menuBtn').onclick=()=>goMenu();
   document.querySelectorAll('#segN button').forEach(b=>b.onclick=()=>{ cfg.N=+b.dataset.n; renderStart(); });
-  document.querySelectorAll('#segD button').forEach(b=>b.onclick=()=>{ cfg.diff=b.dataset.d; renderStart(); });
+  document.querySelectorAll('#segB button').forEach(b=>b.onclick=()=>{ cfg.board=b.dataset.b; renderStart(); });
+  document.querySelectorAll('#segD button').forEach(b=>b.onclick=()=>{ cfg.lv=+b.dataset.d; renderStart(); });
+  document.querySelectorAll('#segG button').forEach(b=>b.onclick=()=>{ cfg.games=+b.dataset.g; renderStart(); });
   document.querySelectorAll('#segL button').forEach(b=>b.onclick=()=>{ cfg.lies=b.dataset.l==='true'; renderStart(); });
   const ms=document.getElementById('mySec'); ms.oninput=()=>{ cfg.mySecret=ms.value; };
-  document.getElementById('startBtn').onclick=newGame;
+  document.getElementById('startBtn').onclick=startMatch;
 }
 
+const gridCols = () => N<=30 ? 6 : 10;
 function gridHtml(s){
-  const tiny = N>100;
-  const cols = N<=30 ? 6 : N<=100 ? 10 : 40;
-  let h=`<div class="grid${tiny?' tiny':''}" style="grid-template-columns:repeat(${cols},1fr)" role="img" aria-label="残っている候補">`;
-  for(let n=1;n<=N;n++) h+=`<div class="cell${s[n]?'':' out'}">${tiny?'':n}</div>`;
+  let h=`<div class="grid" style="grid-template-columns:repeat(${gridCols()},1fr)" role="img" aria-label="残っている候補">`;
+  for(let n=1;n<=N;n++) h+=`<div class="cell${s[n]?'':' out'}">${n}</div>`;
+  return h+'</div>';
+}
+/* ノーマルモード：タップで消す／戻すタイル */
+function markGridHtml(){
+  let h=`<div class="grid mark" id="markGrid" style="grid-template-columns:repeat(${gridCols()},1fr)">`;
+  for(let n=1;n<=N;n++) h+=`<button class="cell${isMarked(n)?' out x':''}" data-n="${n}" aria-pressed="${isMarked(n)}" aria-label="${n}">${n}</button>`;
   return h+'</div>';
 }
 function listHtml(s){
@@ -601,6 +707,7 @@ function qaText(r){
   const by = r.asker==='h' ? 'あなた' : 'CPU';
   const to = r.ans==='h' ? 'あなた' : 'CPU';
   let a, why='', tags='';
+  if(r.q.inq) tags+='<span class="tag inq">尋問</span>';
   if(r.type==='weak'){ a=`「n は ${r.weak.text}」`; tags+='<span class="tag weak">ぼかし</span>'; why=r.weak.why; }
   else {
     a = r.said ? `はい（n は ${r.q.label}）` : `いいえ（n は ${r.q.neg}）`;
@@ -611,21 +718,18 @@ function qaText(r){
   }
   return {by, to, q:`n は ${r.q.label}？`, a, why, tags};
 }
+function recLi(r, i, canDoubt){
+  if(r.kind==='qa'){
+    const t=qaText(r);
+    return `<li class="${r.asker==='h'?'me':''}"><span class="at">${t.by} → ${t.to}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}${t.tags}</span>${t.why?`<span class="why">${esc(t.why)}</span>`:''}${canDoubt?`<button class="doubt-btn" data-i="${i}">これは嘘だ！</button>`:''}</li>`;
+  }
+  if(r.kind==='guess') return `<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}の宣言</span><span class="qt">「${r.g}」${r.ok?'正解！':'はずれ'}</span></li>`;
+  if(r.kind==='doubt') return `<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}のダウト</span><span class="qt">${r.ok?'成功：嘘を見破った':'失敗：本当の答えだった'}</span></li>`;
+  if(r.kind==='skip') return `<li><span class="at">${NAME[r.who]}は休み</span></li>`;
+  return '';
+}
 function logHtml(){
-  const items=[];
-  S.recs.forEach((r,i)=>{
-    if(r.kind==='qa'){
-      const t=qaText(r);
-      const canDoubt = S.phase==='doubt' && r.ans==='c' && r.type!=='weak' && !r.status;
-      items.push(`<li class="${r.asker==='h'?'me':''}"><span class="at">${t.by} → ${t.to}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}${t.tags}</span>${t.why?`<span class="why">${esc(t.why)}</span>`:''}${canDoubt?`<button class="doubt-btn" data-i="${i}">これは嘘だ！</button>`:''}</li>`);
-    } else if(r.kind==='guess'){
-      items.push(`<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}の宣言</span><span class="qt">「${r.g}」${r.ok?'正解！':'はずれ'}</span></li>`);
-    } else if(r.kind==='doubt'){
-      items.push(`<li class="${r.who==='h'?'me':''}"><span class="at">${NAME[r.who]}のダウト</span><span class="qt">${r.ok?'成功：嘘を見破った':'失敗：本当の答えだった'}</span></li>`);
-    } else if(r.kind==='skip'){
-      items.push(`<li><span class="at">${NAME[r.who]}は休み</span></li>`);
-    }
-  });
+  const items=S.recs.map((r,i)=>recLi(r, i, S.phase==='doubt' && doubtable(r,'c')));
   return items.reverse().join('') || '<li class="dim">まだ質問はありません</li>';
 }
 
@@ -633,26 +737,44 @@ function hintBadge(X){
   const h=lieHint(X);
   if(h===null) return '';
   const subj = X==='c' ? 'CPU' : 'あなた';
-  return `<span class="hint ${h?'on':''}">2割時点：${subj}に隠れた嘘${h?'あり':'なし'}${hintResolved(X)?'（見破り済み）':''}</span>`;
+  return `<span class="hint ${h?'on':''}">${HINT_TURN}ターン目時点：${subj}に隠れた嘘${h?'あり':'なし'}${hintResolved(X)?'（見破り済み）':''}</span>`;
+}
+function matchLine(){
+  if(M.games<=1) return '';
+  return `<span class="matchline num">第${M.no}戦 / ${M.games} ・ あなた ${M.pts.h}点 − CPU ${M.pts.c}点</span>`;
+}
+function boardHtml(){
+  if(view==='me'){
+    const meC=cand('h'), mc=cnt(meC);
+    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">あなたの答えからCPUが絞れている範囲</span><button class="peek" id="peekBtn" aria-expanded="${showMe}">${showMe?'隠す':'見る'}</button></div>
+    ${showMe ? `<div class="row"><span></span><span class="count">${mc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>${gridHtml(meC)}`
+      : `<button class="veil" id="veilBtn">タップで表示</button>`}`;
+  }
+  if(S.board==='easy'){
+    const oppC=cand('c'), oc=cnt(oppC);
+    return `<div class="boardhead"><span class="dim" style="font-size:.85rem">これまでのCPUの答えと矛盾しない数</span><span class="count">${oc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+    ${oc===0 ? '<p class="warn">候補が0個！ どこかでCPUが嘘をついています。ダウトのチャンス</p>':''}
+    ${gridHtml(oppC)}${listHtml(oppC)}`;
+  }
+  const left=cnt(markSet());
+  return `<div class="boardhead"><span class="dim" style="font-size:.85rem">タップで消す・もう一度タップで戻す</span><span class="count" id="markCount">${left}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
+    ${markGridHtml()}`;
 }
 function renderGame(){
-  const oppC=cand('c'), meC=cand('h'), oc=cnt(oppC), mc=cnt(meC);
-  const showS = view==='opp' ? oppC : meC;
-  const sc = view==='opp' ? oc : mc;
   const turnTxt = S.phase==='answer' ? 'CPUからの質問' : S.turn==='h' ? 'あなたの番' : 'CPUの番';
   app.innerHTML=`
-<div class="cols"><div class="col"><div class="turn" aria-live="polite">${turnTxt}</div>
+<div class="cols"><div class="col"><div class="turn" aria-live="polite">${turnTxt}<span class="turnno num">あなた ${S.turnNo.h}ターン目 ・ CPU ${S.turnNo.c}ターン目</span>${matchLine()}</div>
   <section class="status">
     <div class="who ${S.turn==='h'?'on':''}">
       <span class="name">あなた</span>
       <button class="ghost" id="hideBtn" style="min-height:0;padding:0;border:none;text-align:left" aria-label="秘密の数の表示を切り替え"><span class="secret">${hidden?'••':S.sec.h}</span></button>
-      <span class="meta">${S.liesOn?`嘘 残${S.lies.h} ・ `:''}ぼかし 残${S.weak.h}</span>
+      <span class="meta">${S.liesOn?`嘘 残${S.lies.h} ・ `:''}ぼかし 残${S.weak.h} ・ 尋問 残${S.inq.h}</span>
       ${hintBadge('h')}
     </div>
     <div class="who ${S.turn==='c'?'on':''}">
-      <span class="name">CPU（${({easy:'やさしい',normal:'ふつう',hard:'つよい'})[S.diff]}）</span>
+      <span class="name">CPU（${LV[S.lv].name}）</span>
       <span class="secret">？</span>
-      <span class="meta">${S.liesOn?'嘘の残りは秘密':'嘘なし'} ・ ぼかし 残${S.weak.c}</span>
+      <span class="meta">${S.liesOn?'嘘の残りは秘密 ・ ':''}ぼかし 残${S.weak.c} ・ 尋問 残${S.inq.c}</span>
       ${hintBadge('c')}
     </div>
   </section>
@@ -663,11 +785,7 @@ function renderGame(){
       <button aria-pressed="${view==='opp'}" data-v="opp">CPUの数の候補</button>
       <button aria-pressed="${view==='me'}" data-v="me">CPUから見たあなた</button>
     </div>
-    <div class="boardhead"><span class="dim" style="font-size:.85rem">${view==='opp'?'これまでのCPUの答えと矛盾しない数':'あなたの答えからCPUが絞れている範囲'}</span><button class="peek" id="peekBtn" aria-expanded="${showBoard}">${showBoard?'隠す':'見る'}</button></div>
-    ${showBoard ? `<div class="row"><span></span><span class="count">${sc}<small class="dim" style="font-size:.8rem"> / ${N}個</small></span></div>
-    ${view==='opp' && oc===0 ? '<p class="warn">候補が0個！ どこかでCPUが嘘をついています。ダウトのチャンス</p>':''}
-    ${gridHtml(showS)}
-    ${view==='opp'?listHtml(showS):''}` : `<button class="veil" id="veilBtn">候補は隠れています。自分で考えてから、タップで確認</button>`}
+    ${boardHtml()}
   </section>
   <section class="panel grow">
     <span class="cap">記録</span>
@@ -688,22 +806,32 @@ function actionHtml(){
   if(S.phase==='cpu') return `<section class="panel"><p class="dim">CPUが考えています…</p></section>`;
   if(S.phase==='wait') return `<section class="panel"><p class="dim">…</p></section>`;
   if(S.phase==='answer') return answerHtml();
-  if(S.phase==='doubt') return `<section class="panel"><p>下の記録から、嘘だと思うCPUの「はい／いいえ」を選んでください。</p><button class="ghost" id="cancelDoubt">やめる</button></section>`;
+  if(S.phase==='doubt') return `<section class="panel"><p>右の記録から、嘘だと思うCPUの「はい／いいえ」を選んでください。（尋問とぼかしの答えは選べません）</p><button class="ghost" id="cancelDoubt">やめる</button></section>`;
+  if(S.phase==='restore') return `<section class="panel pop">
+    <span class="cap">ダウト成功</span>
+    <p>嘘の答えのあと（そのターン）に消した数があります。</p>
+    <p class="num" style="font-weight:700;word-break:break-all">${S.restore.nums.join(', ')}</p>
+    <p>嘘にだまされて消した数として、元に戻しますか？</p>
+    <div class="actions"><button class="btn" id="rsYes">はい、戻す</button><button class="ghost" id="rsNo">いいえ</button></div>
+  </section>`;
   // act
   const sel=S.sel, h=S.hand.h;
   let preview='';
   if(sel.length){
     const q=compound(h[sel[0]], sel[1]!=null?h[sel[1]]:null, S.op);
-    const oc=cand('c'), y=cnt(AND(oc,q.set)), t=cnt(oc);
-    preview=`<div class="qpreview">n は ${esc(q.label)}？${showBoard?`<small>今の候補${t}個のうち、「はい」なら${y}個、「いいえ」なら${t-y}個が残る</small>`:''}</div>`;
+    // 「はいなら○個残る」はイージーモードだけ
+    let tip='';
+    if(S.board==='easy'){ const oc=cand('c'), y=cnt(AND(oc,q.set)), t=cnt(oc); tip=`<small>今の候補${t}個のうち、「はい」なら${y}個、「いいえ」なら${t-y}個が残る</small>`; }
+    preview=`<div class="qpreview">${S.inqOn?'<span class="inqmark">尋問</span>':''}n は ${esc(q.label)}？${tip}</div>`;
   }
-  const canDoubt = S.recs.some(r=>r.kind==='qa' && r.ans==='c' && r.type!=='weak' && !r.status);
+  const canDoubt = S.recs.some(r=>doubtable(r,'c'));
   return `<section class="panel">
     <span class="cap">手札（1枚、または2枚を「かつ／または」でつなぐ）</span>
     <div class="hand">${h.map((c,i)=>`<button class="pcard" aria-pressed="${sel.includes(i)}" data-c="${i}">${esc(c.label)}</button>`).join('')}</div>
     ${sel.length===2?`<div class="ops"><button aria-pressed="${S.op==='and'}" data-op="and">かつ</button><button aria-pressed="${S.op==='or'}" data-op="or">または</button></div>`:''}
     ${preview}
-    <button class="btn wide" id="askBtn" ${sel.length?'':'disabled'}>この命題で質問する</button>
+    <button class="inqbtn" id="inqBtn" aria-pressed="${S.inqOn}" ${S.inq.h>0?'':'disabled'}>${S.inq.h>0?(S.inqOn?'尋問する（もう一度押すとやめる）':'尋問カードを使う（残り1回）'):'尋問カードは使用済み'}<small>この質問には、CPUは嘘もぼかしも使えない</small></button>
+    <button class="btn wide" id="askBtn" ${sel.length?'':'disabled'}>${S.inqOn?'この命題で尋問する':'この命題で質問する'}</button>
     <div class="actions">
       <div class="guess"><input type="number" id="guessIn" min="1" max="${N}" placeholder="数"><button class="ghost" id="guessBtn">宣言する</button></div>
       ${S.liesOn?`<button class="ghost" id="doubtBtn" ${canDoubt?'':'disabled'}>ダウトする</button>`:''}
@@ -713,12 +841,21 @@ function actionHtml(){
 function bindGame(){
   const $=id=>document.getElementById(id);
   $('hideBtn').onclick=()=>{ hidden=!hidden; render(); };
-  $('quitBtn').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
+  $('quitBtn').onclick=()=>{ clearTimeout(cutTimer); S=null; M=null; render(); window.scrollTo(0,0); };
   document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ view=b.dataset.v; render(); });
-  const tog=()=>{ showBoard=!showBoard; render(); };
+  const tog=()=>{ showMe=!showMe; render(); };
   if($('peekBtn')) $('peekBtn').onclick=tog;
   if($('veilBtn')) $('veilBtn').onclick=tog;
   if($('cutin')) $('cutin').onclick=closeCut;
+  const mg=$('markGrid');
+  if(mg) mg.onclick=e=>{
+    const b=e.target.closest('[data-n]'); if(!b || S.cut) return;
+    const n=+b.dataset.n;
+    if(isMarked(n)) delete S.marks[n]; else S.marks[n]=lastCpuAns();
+    const on=isMarked(n);
+    b.classList.toggle('out', on); b.classList.toggle('x', on); b.setAttribute('aria-pressed', on);
+    const left=cnt(markSet()); $('markCount').innerHTML=`${left}<small class="dim" style="font-size:.8rem"> / ${N}個</small>`;
+  };
   if(S.phase==='act'){
     document.querySelectorAll('.pcard').forEach(b=>b.onclick=()=>{
       const i=+b.dataset.c, k=S.sel.indexOf(i);
@@ -726,9 +863,15 @@ function bindGame(){
       render();
     });
     document.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ S.op=b.dataset.op; render(); });
+    $('inqBtn').onclick=()=>{ if(S.inq.h>0){ S.inqOn=!S.inqOn; render(); } };
     $('askBtn').onclick=humanAsk;
     $('guessBtn').onclick=()=>{ const g=parseInt($('guessIn').value,10); if(!(g>=1&&g<=N)){ $('guessIn').focus(); return; } S.toast=''; doGuess('h',g); };
     if($('doubtBtn')) $('doubtBtn').onclick=()=>{ S.phase='doubt'; S.toast=''; render(); };
+  }
+  if(S.phase==='restore'){
+    const done=yes=>{ if(yes) S.restore.nums.forEach(n=>{ delete S.marks[n]; }); S.restore=null; S.phase='act'; render(); };
+    $('rsYes').onclick=()=>done(true);
+    $('rsNo').onclick=()=>done(false);
   }
   if(S.phase==='doubt'){
     $('cancelDoubt').onclick=()=>{ S.phase='act'; render(); };
@@ -744,44 +887,119 @@ function bindGame(){
 // ぼかしの選択肢は質問ごとに一度だけ作り、表示とボタンで同じものを使う
 function answerHtml(){
   const q=S.pending, n=S.sec.h;
-  if(!S._opsShown || S._opsFor!==q){ S._opsShown = S.weak.h>0 ? weakOptions(q,n) : []; S._opsFor=q; }
+  const inq=!!q.inq;
+  if(!S._opsShown || S._opsFor!==q){ S._opsShown = (S.weak.h>0 && !inq) ? weakOptions(q,n) : []; S._opsFor=q; }
   const truth=!!q.set[n], ops=S._opsShown;
   const honest = truth ? `はい（n は ${q.label}）` : `いいえ（n は ${q.neg}）`;
   const lie = truth ? `いいえ（n は ${q.neg}）` : `はい（n は ${q.label}）`;
   return `<section class="ask pop">
-    <span class="cap" style="color:var(--ink-dim)">CPUの質問</span>
+    <span class="cap" style="color:var(--ink-dim)">${inq?'CPUの尋問':'CPUの質問'}</span>
     <span class="q">n は ${esc(q.label)}？</span>
     <span class="truth">あなたの数 ${n} は、この命題を<b>${truth?'満たします（真）':'満たしません（偽）'}</b></span>
+    ${inq?'<span class="inqnote">尋問なので、嘘もぼかしも使えません</span>':''}
     <div class="ans">
       <button id="ansHonest">正直に：${esc(honest)}<small>本当の答え</small></button>
-      ${S.liesOn?`<button class="lie" id="ansLie" ${S.lies.h>0?'':'disabled'}>嘘をつく：${esc(lie)}<small>残り${S.lies.h}回。ダウトされると見破られる</small></button>`:''}
-      ${S.weak.h>0 ? (ops.length ? `<span class="cap">ぼかす（残り${S.weak.h}回・本当だけど弱い答え）</span>`+ops.map((o,i)=>`<button data-w="${i}">n は ${esc(o.text)}<small>${esc(o.why)}</small></button>`).join('') : `<span class="truth">この質問にはぼかせる答えがありません</span>`) : ''}
+      ${S.liesOn && !inq?`<button class="lie" id="ansLie" ${S.lies.h>0?'':'disabled'}>嘘をつく：${esc(lie)}<small>${S.lies.h>0?'1回だけ。ダウトされると見破られる':'もう使った'}</small></button>`:''}
+      ${S.weak.h>0 && !inq ? (ops.length ? `<span class="cap">ぼかす（残り${S.weak.h}回・本当だけど弱い答え）</span>`+ops.map((o,i)=>`<button data-w="${i}">n は ${esc(o.text)}<small>${esc(o.why)}</small></button>`).join('') : `<span class="truth">この質問にはぼかせる答えがありません</span>`) : ''}
     </div>
   </section>`;
 }
 
+/* ============ ふり返り ============ */
+function stepText(k){
+  if(k===0) return {at:'スタート', body:'まだ何も分かっていない'};
+  const r=S.recs[k-1];
+  if(r.kind==='qa'){
+    const t=qaText(r);
+    return {at:`${k}手目 ・ ${t.by} → ${t.to}`, body:`${t.q}　${t.a}`, tags:t.tags, lie:r.lie};
+  }
+  if(r.kind==='guess') return {at:`${k}手目 ・ ${NAME[r.who]}の宣言`, body:`「${r.g}」${r.ok?'正解！':'はずれ'}`};
+  if(r.kind==='doubt') return {at:`${k}手目 ・ ${NAME[r.who]}のダウト`, body:r.ok?'成功：嘘を見破った':'失敗：本当の答えだった'};
+  return {at:`${k}手目`, body:`${NAME[r.who]}は休み`};
+}
+function reviewHtml(){
+  const rv=S.rv, K=S.recs.length, X=rv.X, k=rv.k;
+  const s=candAt(X,k,false), tr=candAt(X,k,true), sec=S.sec[X];
+  let g=`<div class="grid rv" style="grid-template-columns:repeat(${gridCols()},1fr)" role="img" aria-label="${k}手目の時点の候補">`;
+  for(let n=1;n<=N;n++){
+    const cls = s[n] ? '' : (tr[n] ? ' liecut' : ' out');
+    g+=`<div class="cell${cls}${n===sec?' sec':''}">${n}</div>`;
+  }
+  g+='</div>';
+  const st=stepText(k);
+  // 候補の数の移り変わり（その数についての答えが出た手だけ）
+  const trail=[cnt(candAt(X,0,false))];
+  for(let i=1;i<=K;i++){ const r=S.recs[i-1]; if((r.kind==='qa' && r.ans===X) || (r.kind==='doubt' && S.recs[r.idx].ans===X) || (r.kind==='guess' && r.target===X && !r.ok)) trail.push(cnt(candAt(X,i,false))); }
+  const lieN=cnt(AND(tr, NOT(s)));
+  return `<section class="panel">
+    <div class="row"><span class="cap">ふり返り</span><span class="dim num" style="font-size:.85rem">${k} / ${K}手</span></div>
+    <div class="tabs">
+      <button aria-pressed="${X==='c'}" data-rx="c">CPUの数（${S.sec.c}）</button>
+      <button aria-pressed="${X==='h'}" data-rx="h">あなたの数（${S.sec.h}）</button>
+    </div>
+    <div class="rvstep ${st.lie?'lie':''}"><span class="at">${esc(st.at)}</span><span class="qt">${esc(st.body)}${st.tags||''}</span></div>
+    <div class="row"><span class="dim" style="font-size:.82rem">候補 <b class="num">${cnt(s)}</b>個${lieN?` ・ <span class="liekey">赤</span>は嘘で消えた数（${lieN}個）`:''} ・ 枠が正解</span></div>
+    ${g}
+    <input type="range" id="rvRange" min="0" max="${K}" value="${k}" aria-label="手の番号">
+    <div class="actions"><button class="ghost" id="rvPrev" ${k>0?'':'disabled'}>◀ 前の手</button><button class="ghost" id="rvNext" ${k<K?'':'disabled'}>次の手 ▶</button></div>
+    <p class="dim num" style="font-size:.8rem;word-break:break-all">候補の数：${trail.join(' → ')}</p>
+  </section>`;
+}
+function bindReview(){
+  const $=id=>document.getElementById(id), K=S.recs.length;
+  const go=k=>{ S.rv.k=Math.max(0,Math.min(K,k)); const el=$('rvWrap'); el.innerHTML=reviewHtml(); bindReview(); };
+  document.querySelectorAll('[data-rx]').forEach(b=>b.onclick=()=>{ S.rv.X=b.dataset.rx; go(S.rv.k); });
+  $('rvPrev').onclick=()=>go(S.rv.k-1);
+  $('rvNext').onclick=()=>go(S.rv.k+1);
+  $('rvRange').oninput=e=>go(+e.target.value);
+}
+
 function renderOver(){
   const win=S.winner==='h';
+  const last=M.results[M.results.length-1];
   const lies=S.recs.filter(r=>r.kind==='qa' && r.lie);
+  const matchDone = M.no>=M.games;
+  const missed = S.board==='normal' && isMarked(S.sec.c);
+  let head;
+  if(!matchDone) head = `第${M.no}戦：${win?'あなたの勝ち':'CPUの勝ち'}`;
+  else if(M.games===1) head = win?'あなたの勝ち！':'CPUの勝ち';
+  else head = M.pts.h>M.pts.c ? 'あなたの勝ち！' : M.pts.h<M.pts.c ? 'CPUの勝ち' : '引き分け';
+  const rows = M.results.map((x,i)=>`<tr><td>第${i+1}戦</td><td>${NAME[x.winner]}</td><td class="num">${x.turns}ターン</td><td class="num">+${x.pts}点</td></tr>`).join('');
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title result"><h2>${win?'あなたの勝ち！':'CPUの勝ち'}</h2></header>
-  <section class="status">
-    <div class="who"><span class="name">あなたの数</span><span class="secret">${S.sec.h}</span><span class="meta">質問 ${S.asks.h}回</span></div>
-    <div class="who"><span class="name">CPUの数</span><span class="secret">${S.sec.c}</span><span class="meta">質問 ${S.asks.c}回</span></div>
+<div class="cols"><div class="col"><header class="title result"><h2>${head}</h2>
+    <span class="sub">${NAME[last.winner]}が${last.turns}ターン目で正解 ・ 2点${bonusFor(last.turns)?` ＋ はやさボーナス${bonusFor(last.turns)}点`:''}</span></header>
+  <section class="panel">
+    <div class="row"><span class="cap">勝ち点${M.games>1?`（${M.games}本勝負）`:''}</span><span class="num" style="font-weight:700">あなた ${M.pts.h} − ${M.pts.c} CPU</span></div>
+    <div class="tblwrap"><table class="rank"><tr><th>試合</th><th>勝者</th><th>ターン</th><th>点</th></tr>${rows}</table></div>
   </section>
+  <section class="status">
+    <div class="who"><span class="name">あなたの数</span><span class="secret">${S.sec.h}</span><span class="meta">${S.turnNo.h}ターン ・ 質問 ${S.asks.h}回</span></div>
+    <div class="who"><span class="name">CPUの数</span><span class="secret">${S.sec.c}</span><span class="meta">${S.turnNo.c}ターン ・ 質問 ${S.asks.c}回</span></div>
+  </section>
+  ${missed?`<p class="warn">あなたは正解の ${S.sec.c} を自分で消していました</p>`:''}
   <section class="panel">
     <span class="cap">ついた嘘</span>
     ${lies.length ? `<ul class="log">${lies.map(r=>{ const t=qaText(r); return `<li class="${r.ans==='h'?'me':''}"><span class="at">${r.ans==='h'?'あなた':'CPU'}の嘘${r.status==='revealed'?'（見破られた）':'（ばれなかった）'}</span><span class="qt">${esc(t.q)}</span><span>${esc(t.a)}</span></li>`; }).join('')}</ul>` : '<p class="dim">どちらも嘘をつきませんでした</p>'}
   </section>
-  <div class="actions">
+  ${matchDone ? `<div class="actions">
     <button class="btn" id="againBtn">同じ設定でもう一度</button>
     <button class="ghost" id="setBtn">設定にもどる</button>
-  </div></div><div class="col"><section class="panel grow">
+  </div>` : `<section class="panel">
+    <span class="cap">第${M.no+1}戦 ・ ${(M.no+1)%2===1?'あなたが先手':'CPUが先手'}</span>
+    <div class="guess"><input type="number" id="nextSec" min="1" max="${N}" placeholder="おまかせ"><span class="dim" style="font-size:.85rem">次のあなたの秘密の数（空欄なら自動）</span></div>
+    <button class="btn wide" id="nextBtn">第${M.no+1}戦へ</button>
+    <button class="ghost" id="setBtn">やめて設定にもどる</button>
+  </section>`}
+  </div><div class="col"><div id="rvWrap">${reviewHtml()}</div>
+  <section class="panel grow">
     <span class="cap">すべての記録</span>
     <ul class="log">${logHtml()}</ul>
   </section></div></div>`;
-  document.getElementById('againBtn').onclick=()=>{ cfg.mySecret=''; newGame(); };
-  document.getElementById('setBtn').onclick=()=>{ S=null; render(); window.scrollTo(0,0); };
+  bindReview();
+  const $=id=>document.getElementById(id);
+  if($('againBtn')) $('againBtn').onclick=()=>{ cfg.mySecret=''; startMatch(); };
+  if($('nextBtn')) $('nextBtn').onclick=()=>{ cfg.mySecret=$('nextSec').value; newGame(); };
+  $('setBtn').onclick=()=>{ S=null; M=null; render(); window.scrollTo(0,0); };
 }
 
 
@@ -1084,8 +1302,8 @@ async function applyWin(s, win, scores, top3, guessCut){
 }
 function afterRound(s, answers, round){
   const out={};
-  // 2割の公開（一度きり）
-  if(s.liesOn && !s.hint && cnt(candFrom(answers)) < N*0.2){
+  // 5問目（5ラウンド目）が終わった時点で、ホストに隠れた嘘があるかを一度だけ公開
+  if(s.liesOn && !s.hint && answers.length>=5){
     out.hint={lie: O.H.secret.lies.some(i=>answers[i] && answers[i].status!=='revealed'), at:answers.length};
   }
   if(round>=s.R){ out.phase='lastguess'; out.endsAt=fnow()+s.voteSec*1000; }
@@ -1106,7 +1324,7 @@ async function hostAnswer(type, weak){
   const cutA = type==='weak' ? {big:'ぼかし', cls:'weak'} : a.said ? {big:'はい', cls:'yes'} : {big:'いいえ', cls:'no'};
   let cut = Object.assign({who:`ホストの答え（第${answers.length}問）`, q:`n は ${q.label}？`, line:ansLine(a), ms:3000}, cutA);
   if(next.hint && !s.hint){
-    cut.line += ` ／ 候補が2割を切った：ホストに隠れた嘘${next.hint.lie?'あり':'なし'}`;
+    cut.line += ` ／ 5問目終了の発表：ホストに隠れた嘘${next.hint.lie?'あり':'なし'}`;
     cut.ms=4200;
   }
   next.ev=evOf(cut);
@@ -1160,7 +1378,7 @@ async function handleReq(u, k, r){
     }
     x.log.push(a); x.asks++;
     out={kind:'qa', i:x.log.length-1, a};
-    if(O.st.liesOn && !x.hint && cnt(candFrom(x.log, x.wrong)) < N*0.2){
+    if(O.st.liesOn && !x.hint && x.asks>=5){
       x.hint={lie: x.lies.some(i=>x.log[i].status!=='revealed')};
       out.hint=x.hint;
     }
@@ -1233,7 +1451,7 @@ function onMyRes(v){
       const a=r.a, q=specQ(a.q);
       const cA = a.type==='weak' ? {big:'ぼかし', cls:'weak'} : a.said ? {big:'はい', cls:'yes'} : {big:'いいえ', cls:'no'};
       const c=Object.assign({who:'ホストの答え', q:`n は ${q.label}？`, line:ansLine(a), ms:2200}, cA);
-      if(r.hint){ c.line += ` ／ 候補が2割を切った：隠れた嘘${r.hint.lie?'あり':'なし'}`; c.ms=3800; }
+      if(r.hint){ c.line += ` ／ 5問目終了の発表：隠れた嘘${r.hint.lie?'あり':'なし'}`; c.ms=3800; }
       O.hand=O.hand.filter((_,i)=>!(O.usedIdx||[]).includes(i)); O.sel=[]; oRefreshHand();
       return oCut(c);
     }
@@ -1331,7 +1549,7 @@ function oLobby(){
 </div><div class="col">${O.isHost?`<section class="panel">
     <span class="cap">進め方</span>${seg('sMode',[['vote','ラウンド制（投票）'],['solo','個人戦（自動回答）']],S0.mode)}
     <p class="dim" style="font-size:.82rem">${S0.mode==='vote'?'毎ラウンド全員が質問に投票し、一番多い質問にホストが答えます（嘘・ぼかし可）。各自は好きなときに数を宣言できます。':'挑戦者は各自のペースで質問し、この端末が自動で答えます（自動で嘘・ぼかしも混ぜます）。この画面は閉じないでください。'}</p>
-    <span class="cap">数の範囲</span>${seg('sN',[[30,'1〜30'],[50,'1〜50'],[100,'1〜100'],[1000,'1〜1000']],S0.N)}
+    <span class="cap">数の範囲</span>${seg('sN',[[30,'1〜30'],[50,'1〜50'],[100,'1〜100']],S0.N)}
     <span class="cap">嘘</span>${seg('sL',[[true,'嘘あり'],[false,'嘘なし']],S0.lies)}
     ${S0.mode==='vote'?`<span class="cap">ラウンド数</span>${seg('sR',[[6,'6'],[8,'8'],[10,'10'],[12,'12']],S0.R)}
     <span class="cap">投票の時間</span>${seg('sV',[[15,'15秒'],[20,'20秒'],[30,'30秒']],S0.voteSec)}`
@@ -1410,7 +1628,7 @@ function cutHtml(){
     <span class="who2">${esc(c.who||'')}</span>${c.q?`<span class="dim">${esc(c.q)}</span>`:''}
     <span class="big ${c.cls||''}">${esc(c.big||'')}</span><span class="line">${esc(c.line||'')}</span><span class="hint">タップで次へ</span></div></button>`;
 }
-function hintBadgeO(h){ return h ? `<span class="hint ${h.lie?'on':''}">2割時点：ホストに隠れた嘘${h.lie?'あり':'なし'}</span>` : ''; }
+function hintBadgeO(h){ return h ? `<span class="hint ${h.lie?'on':''}">5問目時点：ホストに隠れた嘘${h.lie?'あり':'なし'}</span>` : ''; }
 function rankingHtml(rows, cols){
   return `<div class="tblwrap"><table class="rank"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
