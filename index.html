@@ -6,7 +6,7 @@
 <title>PROOF BLUFF</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500;1,600&family=Rubik+Glitch&family=Zen+Antique&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Knewave&family=Dela+Gothic+One&family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
 body{margin:0}
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -18,7 +18,9 @@ body{margin:0}
   --card:#f4f4f4; --card-dk:#cfcfcf; --ink:#111111; --ink-dim:#5c5c5c;
   --text:#f2f2f2; --dim:#a6a6a6; --line:rgba(255,255,255,.2);
   --red:#b8382c; --blue:#2d5d9a; --ok:#7fd69a; --bad:#ff9f8f;
-  --f-disp:"Zen Antique","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-disp:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;   /* Proof：気品のある明朝 */
+  --f-bluff:"Knewave","Dela Gothic One","Hiragino Sans","Yu Gothic",sans-serif;   /* BLUFF：荒々しい筆 */
+  --gold:#d8b468; --gold-dk:#8f6a26; --blood:#e3271c; --blood-dk:#7d0b07; --cream:#f7efdc;
   --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
@@ -36,17 +38,17 @@ p{margin:0}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
 h1{font-family:var(--f-disp);font-weight:400;font-size:clamp(2.4rem,12vw,3.4rem);margin:0;line-height:1.1;letter-spacing:.08em;text-align:center}
 h2{font-family:var(--f-disp);font-weight:400;font-size:1.3rem;margin:0;letter-spacing:.04em}
-.title{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:14px 4px}
+.title{display:flex;flex-direction:column;align-items:center;gap:6px;padding-block:6px 2px}
 .title .suit{color:var(--rail);letter-spacing:.6em;font-size:.9rem;padding-left:.6em}
-.title .sub{color:var(--dim);font-size:.85rem;letter-spacing:.15em}
+.title .sub{color:var(--gold);font-family:var(--f-disp);font-weight:600;font-size:.9rem;letter-spacing:.2em}
 
 .panel{border:1px solid var(--line);border-radius:12px;padding:14px;background:rgba(0,0,0,.18);display:flex;flex-direction:column;gap:10px;min-width:0}
-.cap{font-size:.75rem;letter-spacing:.14em;color:var(--rail);font-weight:700}
+.cap{font-size:.75rem;letter-spacing:.14em;color:var(--gold);font-weight:700}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 
 button{font:inherit;cursor:pointer;min-height:44px;border-radius:8px}
 button:focus-visible,input:focus-visible{outline:3px solid var(--rail);outline-offset:2px}
-.btn{background:var(--rail);color:#111;border:none;font-weight:700;padding:8px 16px}
+.btn{background:linear-gradient(180deg,#f0402f,var(--blood) 45%,#a8120b);color:#fff;border:none;font-weight:700;padding:8px 16px;box-shadow:0 2px 0 var(--blood-dk),0 0 0 1px rgba(0,0,0,.4) inset;text-shadow:0 1px 0 rgba(0,0,0,.35)}
 .btn.wide{width:100%;font-size:1.05rem}
 .btn:disabled{opacity:.4;cursor:default}
 .ghost{background:transparent;color:var(--text);border:1px solid var(--line);padding:8px 14px}
@@ -63,7 +65,7 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
 .who .name{font-weight:700;font-size:.9rem}
 .who .secret{font-family:var(--f-num);font-size:1.8rem;font-weight:600;line-height:1.2}
 .who .meta{font-size:.78rem;color:var(--dim)}
-.turn{font-family:var(--f-disp);font-size:1.15rem;text-align:center}
+.turn{font-family:var(--f-disp);font-weight:800;font-size:1.2rem;text-align:center;color:var(--cream)}
 
 /* 候補の盤面 */
 .tabs{display:flex;gap:6px}
@@ -117,18 +119,25 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
 .doubt-btn{align-self:flex-start;background:var(--red);color:#fff;border:none;font-weight:700;padding:4px 12px;min-height:36px;margin-top:4px}
 
 .cutin{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(0,0,0,.93);padding:24px;cursor:pointer;border:none;width:100%;color:var(--text);font:inherit}
-.cutin .band{width:min(560px,100%);display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 16px;border-block:3px solid var(--rail);background:linear-gradient(90deg,transparent,rgba(24,24,24,.98) 12%,rgba(24,24,24,.98) 88%,transparent)}
-.cutin .who2{font-size:.9rem;letter-spacing:.14em;color:var(--rail);font-weight:700}
-.cutin .big{font-family:var(--f-disp);font-size:clamp(4.5rem,24vw,8rem);line-height:1;letter-spacing:.08em}
-.cutin .big.yes{color:var(--ok)} .cutin .big.no{color:var(--bad)} .cutin .big.weak{color:#9cc0f0} .cutin .big.info{color:var(--card)}
-.cutin .line{font-weight:700;font-size:1.05rem;text-align:center;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
+.cutin .band{width:min(620px,100%);display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 16px;border-block:3px solid var(--gold);background:linear-gradient(90deg,transparent,rgba(20,14,10,.97) 12%,rgba(20,14,10,.97) 88%,transparent);box-shadow:0 0 0 1px rgba(0,0,0,.6),0 -6px 0 -3px var(--blood),0 6px 0 -3px var(--blood)}
+.cutin .who2{font-family:var(--f-disp);font-size:1rem;letter-spacing:.18em;color:var(--gold);font-weight:800}
+.cutin .big{font-family:var(--f-bluff);font-size:clamp(4.2rem,22vw,7.6rem);line-height:1.05;letter-spacing:.04em;padding:0 .12em;transform:skewX(-8deg);
+  background:linear-gradient(180deg,#ff6a4d 0%,var(--blood) 45%,#8f0c06 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  -webkit-text-stroke:2px #1a0503;filter:drop-shadow(0 3px 0 #000) drop-shadow(0 0 14px rgba(227,39,28,.45))}
+/* はい・本当・正解 … Proof の字（クリーム色の気品ある明朝・斜体） */
+.cutin .big.yes,.cutin .big.info{font-family:var(--f-disp);font-weight:800;transform:skewX(-10deg);
+  background:linear-gradient(180deg,#ffffff 0%,var(--cream) 40%,#cbb48a 75%,#fff4dc 100%);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-stroke:1.5px #2a1c0c;filter:drop-shadow(0 3px 0 #000) drop-shadow(0 0 12px rgba(216,180,104,.4))}
+/* ぼかし … 金の × の色 */
+.cutin .big.weak{background:linear-gradient(180deg,#fff0b8 0%,var(--gold) 45%,var(--gold-dk) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:1.5px #2a1c0c;filter:drop-shadow(0 3px 0 #000)}
+.cutin .line{font-family:var(--f-disp);font-weight:800;font-size:1.1rem;color:var(--cream);text-align:center;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
 .cutin .hint{font-size:.78rem;color:var(--dim)}
 .cutin .line{white-space:pre-line}
 @media (prefers-reduced-motion: no-preference){
   .cutin .band{animation:slide .35s cubic-bezier(.2,.9,.3,1.2)}
   .cutin .big{animation:stamp .4s .1s both cubic-bezier(.2,.9,.3,1.4)}
   @keyframes slide{from{transform:translateX(-30%);opacity:0}to{transform:none;opacity:1}}
-  @keyframes stamp{from{transform:scale(1.8);opacity:0}to{transform:none;opacity:1}}
+  @keyframes stamp{from{transform:scale(1.8) skewX(-8deg);opacity:0}to{transform:skewX(-8deg);opacity:1}}
 }
 .boardhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .peek{background:transparent;color:var(--text);border:1px solid var(--line);font-size:.85rem;padding:4px 12px;min-height:36px}
@@ -136,7 +145,8 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
 .who .hint{font-size:.78rem;font-weight:700;border-radius:4px;padding:1px 6px;align-self:flex-start;background:var(--ok);color:#0b2a1b;margin-top:2px}
 .who .hint.on{background:var(--red);color:#fff}
 .toast{background:var(--card);color:var(--ink);border-radius:10px;padding:10px 12px;font-weight:700}
-.result h2{font-size:2rem;text-align:center}
+.result h2{font-family:var(--f-bluff);font-size:clamp(2rem,9vw,2.8rem);text-align:center;transform:skewX(-8deg);
+  background:linear-gradient(180deg,#ff6a4d,var(--blood) 50%,#8f0c06);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1px #1a0503;filter:drop-shadow(0 2px 0 #000)}
 .rules{display:flex;flex-direction:column;gap:6px;margin:0;padding-left:1.2em}
 .rules li{font-size:.9rem}
 @media (prefers-reduced-motion: no-preference){
@@ -183,6 +193,21 @@ input[type=number]{font:inherit;font-family:var(--f-num);font-size:1.2rem;color:
 .rvstep.lie{border-left-color:var(--red)}
 .rvstep .at{color:var(--dim)} .rvstep .qt{font-weight:700}
 input[type=range]{width:100%;accent-color:var(--rail);min-height:32px}
+/* ---- 題字つきの画面 ---- */
+.page{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (min-width:760px) and (min-height:560px){
+  body:has(.page) .wrap{height:100%}
+  .page{height:100%;min-height:0}
+  .page > .title{flex:0 0 auto}
+  .page > .title .logo img{width:auto;height:min(26vh,230px)}
+  .page > .title .logo.sm img{height:min(17vh,150px)}
+  .page > .cols{height:auto;flex:1 1 auto;min-height:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  /* メニュー：題字の下に3つのボタンを横に並べる */
+  .wrap:has(> .panel.menu){max-width:1100px;min-height:100%;justify-content:center}
+  .wrap:has(> .panel.menu) .logo img{width:min(62vw,560px)}
+  .wrap:has(> .panel.menu) .menu{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .wrap:has(> .panel.menu) .menu .btn{height:100%;min-height:120px;font-size:1.25rem;justify-content:center}
+}
 /* ---- オンライン ---- */
 .tiebtn{text-align:left;padding:12px 14px;border:2px solid var(--card-dk);background:var(--card);color:var(--ink);font-weight:700;font-size:1.05rem}
 .tiebtn small{display:block;font-weight:500;color:var(--ink-dim);font-size:.8rem}
@@ -213,15 +238,15 @@ table.rank{width:100%;border-collapse:collapse;font-size:.9rem}
 .ok-msg{font-weight:700;color:var(--ok);text-align:center;margin:0}
 .meta-r{font-size:.8rem;color:var(--dim)}
 .menu{gap:12px}
-.menu .btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px}
+.menu .btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px;font-family:var(--f-bluff);font-weight:400;font-size:1.3rem;letter-spacing:.04em}
+.menu .btn small{font-family:var(--f-body)}
 .menu .btn small{font-weight:500;font-size:.8rem;opacity:.8}
-.menu .btn.alt{background:var(--card)}
+.menu .btn.alt{background:linear-gradient(180deg,#fffaf0,var(--cream) 50%,#e3d6bb);color:#1b1408;box-shadow:0 2px 0 var(--gold-dk),0 0 0 1px rgba(0,0,0,.3) inset;text-shadow:none}
 
 /* ---- ロゴ：PROOF（優美）／BLUFF（激しい） ---- */
-.logo{display:flex;flex-direction:column;align-items:center;line-height:.9;margin:0;gap:2px}
-.logo .proof{font-family:"Cormorant Garamond","Times New Roman",serif;font-style:italic;font-weight:600;font-size:clamp(3rem,15vw,4.6rem);letter-spacing:.12em;padding-left:.12em;color:var(--text)}
-.logo .bluff{font-family:"Rubik Glitch","Impact","Arial Black",sans-serif;font-weight:400;font-size:clamp(3.4rem,17vw,5.2rem);letter-spacing:.04em;color:var(--text);transform:skewX(-6deg)}
-.logo.sm .proof{font-size:2.2rem} .logo.sm .bluff{font-size:2.5rem}
+.logo{display:flex;justify-content:center;margin:0;line-height:0}
+.logo img{display:block;width:min(92vw,460px);height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.6))}
+.logo.sm img{width:min(70vw,280px)}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -681,7 +706,7 @@ function renderStart(){
   const m=MODES[cfg.N];
   const segL=[[true,'嘘あり'],[false,'嘘なし']].map(([k,l])=>`<button aria-pressed="${cfg.lies===k}" data-l="${k}">${l}</button>`).join('');
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs 1 ・ CPU戦</span></header>
+<div class="page"><header class="title"><h1 class="logo"><img src="title.png" alt="PROOF × BLUFF"></h1><span class="sub">1 vs 1 ・ CPU戦</span></header><div class="cols"><div class="col">
   <section class="panel">
     <span class="cap">ルール</span>
     <ul class="rules">
@@ -707,7 +732,7 @@ function renderStart(){
     <div class="guess"><input type="number" id="mySec" min="1" max="${cfg.N}" placeholder="おまかせ" value="${esc(cfg.mySecret)}"><span class="dim" style="font-size:.85rem">空欄なら自動で決まります</span></div>
   </section>
   <button class="btn wide" id="startBtn">ゲーム開始</button>
-  <button class="ghost" id="menuBtn">メニューにもどる</button></div></div>`;
+  <button class="ghost" id="menuBtn">メニューにもどる</button></div></div></div>`;
   document.getElementById('menuBtn').onclick=()=>goMenu();
   document.querySelectorAll('#segN button').forEach(b=>b.onclick=()=>{ cfg.N=+b.dataset.n; renderStart(); });
   document.querySelectorAll('#segB button').forEach(b=>b.onclick=()=>{ cfg.board=b.dataset.b; renderStart(); });
@@ -1589,7 +1614,7 @@ function oRender(){
 function oHome(){
   const ok=!!(fdb && uid), last=ls.get(O.kind==='duel'?'bluff-duel':'bluff-room');
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">${O.kind==='duel'?'1 vs 1 ・ オンライン':'ホスト vs チャレンジャー ・ オンライン'}</span></header>
+<div class="page"><header class="title"><h1 class="logo"><img src="title.png" alt="PROOF × BLUFF"></h1><span class="sub">${O.kind==='duel'?'1 vs 1 ・ オンライン':'ホスト vs チャレンジャー ・ オンライン'}</span></header><div class="cols"><div class="col">
   <section class="panel">
     <label class="cap" for="nickInput">プレイヤー名（8文字まで）</label>
     <input type="text" class="txt" id="nickInput" maxlength="8" value="${esc(O.nick)}" placeholder="なまえ" autocomplete="nickname">
@@ -1605,7 +1630,7 @@ function oHome(){
     <button class="btn wide" id="createBtn" ${ok?'':'disabled'}>部屋を作る</button>
   </section>
   ${ok?'':`<p class="dim" style="text-align:center;font-size:.85rem">${esc(fbError||'サーバーに接続しています…')}</p>`}
-  <button class="ghost" id="backMenu">メニューにもどる</button></div></div>`;
+  <button class="ghost" id="backMenu">メニューにもどる</button></div></div></div>`;
   const ni=document.getElementById('nickInput');
   ni.oninput=()=>{ O.nick=ni.value.trim().slice(0,8); ls.set('bluff-nick', O.nick); };
   const ci=document.getElementById('codeInput'); ci.oninput=()=>{ ci.value=ci.value.replace(/\D/g,'').slice(0,4); };
@@ -1624,7 +1649,7 @@ function seg(id, items, cur){ return `<div class="seg" id="${id}">${items.map(([
 function oLobby(){
   const S0=O.set;
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">ホスト vs チャレンジャー ・ オンライン</span></header>
+<div class="page"><header class="title"><h1 class="logo sm"><img src="title.png" alt="PROOF × BLUFF"></h1><span class="sub">ホスト vs チャレンジャー ・ オンライン</span></header><div class="cols"><div class="col">
   <section class="panel">
     <span class="cap">部屋コード</span>
     <p class="roomcode num">${esc(O.code)}</p>
@@ -1646,7 +1671,7 @@ function oLobby(){
     <div class="guess"><input type="number" id="secIn" min="1" max="${S0.N}" placeholder="おまかせ" value="${esc(S0.secret)}"><span class="dim" style="font-size:.85rem">挑戦者に見えないように入力</span></div>
   </section>
   <button class="btn wide" id="startBtn">このメンバーで開始</button>`:''}
-  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div>`;
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div></div>`;
   if(O.isHost){
     const bind=(id,key,conv)=>document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{ S0[key]=conv(b.dataset.v); oRender(); });
     bind('sMode','mode',v=>v); bind('sN','N',Number); bind('sL','lies',v=>v==='true');
@@ -2291,7 +2316,7 @@ function duelLobby(){
     <p class="dim" style="font-size:.82rem">${G && G.sentSec[1] ? `決定済み：<b class="num">${G.sentSec[1]}</b>（変えるときはもう一度）` : '決めなければ自動で決まります'}</p>
     ${G && G.secMsg ? `<p class="warn">${esc(G.secMsg)}</p>`:''}`;
   app.innerHTML=`
-<div class="cols"><div class="col"><header class="title"><h1 class="logo sm"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">1 vs 1 ・ オンライン</span></header>
+<div class="page"><header class="title"><h1 class="logo sm"><img src="title.png" alt="PROOF × BLUFF"></h1><span class="sub">1 vs 1 ・ オンライン</span></header><div class="cols"><div class="col">
   <section class="panel">
     <span class="cap">部屋コード</span>
     <p class="roomcode num">${esc(O.code)}</p>
@@ -2304,7 +2329,7 @@ function duelLobby(){
   </section>
 </div><div class="col"><section class="panel">${segs}</section>
   ${host?`<button class="btn wide" id="startBtn" ${gid?'':'disabled'}>対戦を始める</button>`:''}
-  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div>`;
+  <button class="ghost" id="leaveBtn">部屋を出る</button></div></div></div>`;
   const $=id=>document.getElementById(id);
   if(host){
     const bind=(id,key,conv)=>document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{ st[key]=conv(b.dataset.v); duelLobbyState(); oRender(); });
@@ -2322,7 +2347,7 @@ let fbStarted=false;
 function goMenu(){
   clearTimeout(cutTimer); S=null; M=null; D=null; G=null; O.on=false;
   app.innerHTML=`
-  <header class="title"><h1 class="logo"><span class="proof">PROOF</span><span class="bluff">BLUFF</span></h1><span class="sub">真か、偽か、それとも嘘か</span></header>
+  <header class="title"><h1 class="logo"><img src="title.png" alt="PROOF × BLUFF"></h1><span class="sub">真か、偽か、それとも嘘か</span></header>
   <section class="panel menu">
     <button class="btn wide" id="mCpu">vs CPU<small>オフライン ・ CPUと対戦（ひとりで練習）</small></button>
     <button class="btn wide alt" id="mDuel">1 vs 1<small>オンライン ・ CPU戦と同じルールで友だちと対戦</small></button>
